@@ -6,7 +6,7 @@ First, run the development server:
 
 ```bash
 nvm use 20
-pm install
+npm install
 npm run dev
 # or
 yarn dev

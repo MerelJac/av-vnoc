@@ -228,3 +228,65 @@ model Device {
   @@index([roomId])
   @@index([platform])
 }
+
+model WebhookEvent {
+  id          String    @id @default(uuid())
+  platform    Platform
+  eventId     String
+  payload     Json
+  processedAt DateTime?
+  error       String?
+  receivedAt  DateTime  @default(now())
+
+  @@unique([platform, eventId])
+  @@index([platform, eventId])
+}
+
+model AlertGroup {
+  id         String         @id @default(uuid())
+  type       AlertGroupType
+  customerId String?
+  customer   Customer?      @relation(fields: [customerId], references: [id])
+  siteId     String?
+  site       Site?          @relation(fields: [siteId], references: [id])
+  roomId     String?
+  room       Room?          @relation(fields: [roomId], references: [id])
+  resolvedAt DateTime?
+  createdAt  DateTime       @default(now())
+
+  alerts Alert[]
+
+  @@index([customerId])
+  @@index([siteId])
+  @@index([roomId])
+}
+
+model Alert {
+  id              String        @id @default(uuid())
+  platform        Platform
+  platformAlertId String
+  deviceId        String?
+  device          Device?       @relation(fields: [deviceId], references: [id])
+  roomId          String?
+  room            Room?         @relation(fields: [roomId], references: [id])
+  groupId         String?
+  group           AlertGroup?   @relation(fields: [groupId], references: [id])
+  severity        AlertSeverity
+  status          AlertStatus   @default(ACTIVE)
+  title           String
+  description     String?
+  rawPayload      Json
+  receivedAt      DateTime
+  autoCloseAt     DateTime?
+  resolvedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  ticket Ticket?
+
+  @@unique([platform, platformAlertId])
+  @@index([status])
+  @@index([deviceId])
+  @@index([roomId])
+  @@index([groupId])
+}

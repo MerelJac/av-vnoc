@@ -81,3 +81,31 @@ describe('processAlert - Pass 1: Dedup', () => {
     })
   })
 })
+
+describe('processAlert - Pass 2: Alert persistence with autoCloseAt', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('creates a new alert with autoCloseAt 60s after receivedAt', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.alert.count).mockResolvedValue(0)
+    vi.mocked(prisma.alertGroup.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.alertGroup.create).mockResolvedValue({ id: 'group-1' } as any)
+    vi.mocked(prisma.alert.create).mockResolvedValue({
+      id: 'new-alert-1',
+      roomId: null,
+      title: 'Device offline: Poly X50',
+      severity: 'HIGH',
+    } as any)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.ticket.create).mockResolvedValue({ id: 'ticket-1', title: 'Device offline', priority: 'P2' } as any)
+    vi.mocked(prisma.activityLog.create).mockResolvedValue({} as any)
+
+    const receivedAt = new Date('2026-05-27T10:00:00Z')
+    await processAlert(makeAlert({ receivedAt }))
+
+    const createCall = vi.mocked(prisma.alert.create).mock.calls[0][0]
+    const autoCloseAt = createCall.data.autoCloseAt as Date
+    expect(autoCloseAt.getTime()).toBe(receivedAt.getTime() + 60_000)
+  })
+})

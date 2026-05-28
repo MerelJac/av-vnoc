@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { NormalizedAlert } from "@/lib/integrations/types";
 import { emitSseEvent } from "@/lib/sse-bus";
+import type { AlertSeverity, TicketPriority } from "@prisma/client";
 
 export type CorrelationAction = "deduped" | "suppressed" | "created";
 
@@ -31,6 +33,179 @@ export async function processAlert(
     return { action: "deduped", alertId: existing.id };
   }
 
-  // Passes 2–4 not yet implemented
-  throw new Error("correlation: passes 2–4 not yet implemented");
+  // Device lookup
+  const device = await prisma.device.findUnique({
+    where: {
+      platform_platformId: {
+        platform: normalized.platform,
+        platformId: normalized.platformDeviceId,
+      },
+    },
+    include: { room: { include: { site: { include: { customer: true } } } } },
+  });
+
+  // Pass 2: Alert persistence with flap suppression (autoCloseAt = receivedAt + 60 seconds)
+  const autoCloseAt = new Date(normalized.receivedAt.getTime() + 60_000);
+
+  const alert = await prisma.alert.create({
+    data: {
+      platform: normalized.platform,
+      platformAlertId: normalized.platformAlertId,
+      deviceId: device?.id ?? null,
+      roomId: device?.roomId ?? null,
+      severity: normalized.severity,
+      status: "ACTIVE",
+      title: normalized.title,
+      description: normalized.description ?? null,
+      rawPayload: normalized.rawPayload as object,
+      receivedAt: normalized.receivedAt,
+      autoCloseAt,
+    },
+  });
+
+  // Pass 3: Pattern grouping — call assignAlertGroup
+  await assignAlertGroup(alert, device as DeviceWithRoom | null);
+
+  // Ticket auto-creation
+  const SEVERITY_TO_PRIORITY: Record<AlertSeverity, TicketPriority> = {
+    CRITICAL: "P1",
+    HIGH: "P2",
+    MEDIUM: "P3",
+    LOW: "P4",
+    INFO: "P4",
+  };
+  const SLA_HOURS: Record<TicketPriority, number> = {
+    P1: 1,
+    P2: 4,
+    P3: 8,
+    P4: 24,
+  };
+
+  const priority = SEVERITY_TO_PRIORITY[normalized.severity];
+  const slaDeadline = new Date(Date.now() + SLA_HOURS[priority] * 3_600_000);
+
+  const ticket = await prisma.ticket.create({
+    data: {
+      alertId: alert.id,
+      customerId: device?.room?.site?.customerId ?? null,
+      priority,
+      status: "OPEN",
+      title: alert.title,
+      description: alert.description ?? null,
+      slaDeadline,
+    },
+  });
+
+  await prisma.activityLog.create({
+    data: {
+      type: "ticket_created",
+      platform: normalized.platform,
+      alertId: alert.id,
+      ticketId: ticket.id,
+      message: `Ticket auto-created for alert: ${alert.title}`,
+    },
+  });
+
+  // SSE events
+  emitSseEvent("alert_created", { id: alert.id, title: alert.title, severity: alert.severity });
+  emitSseEvent("ticket_opened", { id: ticket.id, title: ticket.title, priority: ticket.priority });
+  emitSseEvent("kpi_updated", {});
+
+  return { action: "created", alertId: alert.id, ticketId: ticket.id };
+}
+
+// Prisma type for device with room/site/customer
+type DeviceWithRoom = Prisma.DeviceGetPayload<{
+  include: { room: { include: { site: { include: { customer: true } } } } };
+}>;
+
+async function assignAlertGroup(
+  alert: { id: string; roomId: string | null },
+  device: DeviceWithRoom | null
+): Promise<void> {
+  if (!alert.roomId) {
+    // No room context — DEVICE_FAULT group with no location
+    const group = await prisma.alertGroup.create({
+      data: {
+        type: "DEVICE_FAULT",
+        customerId: device?.room?.site?.customerId ?? null,
+      },
+    });
+    await prisma.alert.update({
+      where: { id: alert.id },
+      data: { groupId: group.id },
+    });
+    return;
+  }
+
+  const twoMinutesAgo = new Date(Date.now() - 2 * 60_000);
+
+  const recentRoomAlertCount = await prisma.alert.count({
+    where: {
+      roomId: alert.roomId,
+      status: "ACTIVE",
+      createdAt: { gte: twoMinutesAgo },
+      id: { not: alert.id },
+    },
+  });
+
+  if (recentRoomAlertCount >= 1) {
+    // 2+ active devices in same room → ROOM_OUTAGE
+    const existingRoomGroup = await prisma.alertGroup.findFirst({
+      where: { roomId: alert.roomId, type: "ROOM_OUTAGE", resolvedAt: null },
+    });
+
+    const roomGroup =
+      existingRoomGroup ??
+      (await prisma.alertGroup.create({
+        data: {
+          type: "ROOM_OUTAGE",
+          roomId: alert.roomId,
+          siteId: device?.room?.siteId ?? null,
+          customerId: device?.room?.site?.customerId ?? null,
+        },
+      }));
+
+    await prisma.alert.update({
+      where: { id: alert.id },
+      data: { groupId: roomGroup.id },
+    });
+
+    // Check for SITE_OUTAGE escalation (3+ rooms at same site)
+    if (device?.room?.siteId) {
+      const activeRoomGroupsAtSite = await prisma.alertGroup.count({
+        where: { siteId: device.room.siteId, type: "ROOM_OUTAGE", resolvedAt: null },
+      });
+
+      if (activeRoomGroupsAtSite >= 3) {
+        const existingSiteGroup = await prisma.alertGroup.findFirst({
+          where: { siteId: device.room.siteId, type: "SITE_OUTAGE", resolvedAt: null },
+        });
+
+        if (!existingSiteGroup) {
+          await prisma.alertGroup.create({
+            data: {
+              type: "SITE_OUTAGE",
+              siteId: device.room.siteId,
+              customerId: device.room.site?.customerId ?? null,
+            },
+          });
+        }
+      }
+    }
+  } else {
+    // Single device — DEVICE_FAULT group
+    const group = await prisma.alertGroup.create({
+      data: {
+        type: "DEVICE_FAULT",
+        roomId: alert.roomId,
+        siteId: device?.room?.siteId ?? null,
+        customerId: device?.room?.site?.customerId ?? null,
+      },
+    });
+    await prisma.alert.update({
+      where: { id: alert.id },
+      data: { groupId: group.id },
+    });
+  }
 }

@@ -112,14 +112,15 @@ model OrganizationMember {
 }
 
 model Profile {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(uuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   firstName String
   lastName  String
   phone     String?
   avatarUrl String?
-  updatedAt DateTime @updatedAt
+  vnocRole  VnocRole?
+  updatedAt DateTime  @updatedAt
 }
 
 model Session {
@@ -332,4 +333,32 @@ model TicketAction {
   createdAt DateTime         @default(now())
 
   @@index([ticketId])
+}
+
+model ActivityLog {
+  id        String    @id @default(uuid())
+  type      String
+  platform  Platform?
+  userId    String?
+  alertId   String?
+  ticketId  String?
+  message   String
+  meta      Json?
+  createdAt DateTime  @default(now())
+
+  @@index([alertId])
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+model PlatformCredential {
+  id            String   @id @default(uuid())
+  platform      Platform @unique
+  clientId      String?
+  clientSecret  String?
+  apiKey        String?
+  webhookSecret String?
+  config        Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

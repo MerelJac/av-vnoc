@@ -8,5 +8,12 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
 
   if (!session) redirect("/login");
 
-  return <SidebarLayout isSuperAdmin={session.user.isSuperAdmin}>{children}</SidebarLayout>;
+  return (
+    <SidebarLayout
+      isSuperAdmin={session.user.isSuperAdmin}
+      vnocRole={session.user.vnocRole}
+    >
+      {children}
+    </SidebarLayout>
+  );
 }

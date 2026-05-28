@@ -12,6 +12,66 @@ enum OrgRole {
   OWNER
 }
 
+enum Platform {
+  POLY_LENS
+  YEALINK_YMCS
+  NEAT_PULSE
+  LOGITECH_SYNC
+  CISCO_CONTROL_HUB
+  UTELOGY
+}
+
+enum AlertSeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum AlertStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  AUTO_RESOLVED
+  SUPPRESSED
+  RESOLVED
+}
+
+enum TicketPriority {
+  P1
+  P2
+  P3
+  P4
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum VnocRole {
+  TIER1
+  TIER2
+  MANAGER
+}
+
+enum AlertGroupType {
+  ROOM_OUTAGE
+  SITE_OUTAGE
+  DEVICE_FAULT
+}
+
+enum TicketActionType {
+  NOTE
+  REBOOT
+  FIRMWARE_PUSH
+  ESCALATE
+  STATUS_CHANGE
+  CONFIG_RESTORE
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique

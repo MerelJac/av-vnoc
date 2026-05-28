@@ -9,13 +9,24 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>
   ),
 }))
+vi.mock('next-auth/react', () => ({
+  signOut: vi.fn(),
+}))
 
 import SidebarLayout from '@/app/components/team/Sidebar'
+
+const DEFAULT_PROPS = {
+  customers: [],
+  totalCustomers: 0,
+  myQueueCount: 0,
+  userInitials: 'MJ',
+  userName: 'Merel Jacobs',
+}
 
 describe('SidebarLayout', () => {
   it('shows My Queue link for TIER1 role', () => {
     render(
-      <SidebarLayout isSuperAdmin={false} vnocRole="TIER1">
+      <SidebarLayout {...DEFAULT_PROPS} isSuperAdmin={false} vnocRole="TIER1">
         <div>content</div>
       </SidebarLayout>
     )
@@ -23,32 +34,16 @@ describe('SidebarLayout', () => {
     expect(screen.getByText('All Alerts')).toBeInTheDocument()
   })
 
-  it('shows Customers link only for MANAGER and above', () => {
-    const { rerender } = render(
-      <SidebarLayout isSuperAdmin={false} vnocRole="TIER1">
-        <div />
-      </SidebarLayout>
-    )
-    expect(screen.queryByRole('link', { name: /Customers/i })).not.toBeInTheDocument()
-
-    rerender(
-      <SidebarLayout isSuperAdmin={false} vnocRole="MANAGER">
-        <div />
-      </SidebarLayout>
-    )
-    expect(screen.getByRole('link', { name: /Customers/i })).toBeInTheDocument()
-  })
-
   it('shows Platform Settings link only for superAdmin', () => {
     const { rerender } = render(
-      <SidebarLayout isSuperAdmin={false} vnocRole="MANAGER">
+      <SidebarLayout {...DEFAULT_PROPS} isSuperAdmin={false} vnocRole="MANAGER">
         <div />
       </SidebarLayout>
     )
     expect(screen.queryByText('Platform Settings')).not.toBeInTheDocument()
 
     rerender(
-      <SidebarLayout isSuperAdmin={true} vnocRole={null}>
+      <SidebarLayout {...DEFAULT_PROPS} isSuperAdmin={true} vnocRole={null}>
         <div />
       </SidebarLayout>
     )

@@ -159,3 +159,72 @@ model Invite {
   @@index([email])
   @@index([organizationId])
 }
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sites       Site[]
+  tickets     Ticket[]
+  alertGroups AlertGroup[]
+}
+
+model Site {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  name       String
+  address    String?
+  city       String?
+  state      String?
+  lat        Float?
+  lng        Float?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  rooms       Room[]
+  alertGroups AlertGroup[]
+
+  @@index([customerId])
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  siteId    String
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  devices     Device[]
+  alerts      Alert[]
+  alertGroups AlertGroup[]
+
+  @@index([siteId])
+}
+
+model Device {
+  id         String    @id @default(uuid())
+  roomId     String?
+  room       Room?     @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  platform   Platform
+  platformId String
+  name       String
+  model      String?
+  firmware   String?
+  ipAddress  String?
+  macAddress String?
+  status     String    @default("unknown")
+  lastSeenAt DateTime?
+  rawPayload Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  alerts Alert[]
+
+  @@unique([platform, platformId])
+  @@index([roomId])
+  @@index([platform])
+}

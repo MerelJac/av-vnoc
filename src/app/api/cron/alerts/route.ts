@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPolyLensAdapter } from "@/lib/integrations/poly-lens";
 import { createYealinkAdapter } from "@/lib/integrations/yealink";
 import { getConfig, updateConfig } from "@/lib/integrations/credentials";
-// @ts-ignore -- implemented in Plan 04
-import { processAlert } from "@/lib/correlation";
+import { processAlert, runAutoResolveSweep } from "@/lib/correlation";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -61,5 +60,13 @@ export async function GET(req: NextRequest) {
     results["YEALINK_YMCS"] = { processed: 0, errors: [(err as Error).message] };
   }
 
-  return NextResponse.json({ ok: true, results });
+  let autoResolved = 0;
+  try {
+    const sweep = await runAutoResolveSweep();
+    autoResolved = sweep.resolved;
+  } catch {
+    // Sweep failure should not fail the whole cron run
+  }
+
+  return NextResponse.json({ ok: true, results, autoResolved });
 }

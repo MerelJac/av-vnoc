@@ -187,6 +187,50 @@ export async function processAlert(
   return { action: "created", alertId: alert.id, ticketId: ticket.id };
 }
 
+export async function runAutoResolveSweep(): Promise<{ resolved: number }> {
+  const now = new Date();
+
+  // Find all ACTIVE alerts past their autoCloseAt window
+  const candidates = await prisma.alert.findMany({
+    where: {
+      status: "ACTIVE",
+      autoCloseAt: { lte: now },
+    },
+    select: { id: true, deviceId: true, autoCloseAt: true },
+  });
+
+  let resolved = 0;
+
+  for (const alert of candidates) {
+    if (!alert.deviceId) continue;
+
+    const device = await prisma.device.findUnique({
+      where: { id: alert.deviceId },
+      select: { status: true },
+    });
+
+    if (!device || device.status !== "online") continue;
+
+    await prisma.alert.update({
+      where: { id: alert.id },
+      data: { status: "AUTO_RESOLVED", resolvedAt: now },
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        type: "auto_resolved",
+        alertId: alert.id,
+        message: "Alert auto-resolved: device returned online within flap window",
+      },
+    });
+
+    emitSseEvent("alert_resolved", { id: alert.id });
+    resolved++;
+  }
+
+  return { resolved };
+}
+
 async function assignAlertGroup(
   alert: { id: string; roomId: string | null },
   device: DeviceWithRoom | null

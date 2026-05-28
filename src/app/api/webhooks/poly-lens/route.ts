@@ -60,7 +60,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    // @ts-expect-error -- correlation module implemented in Plan 04
     const { processAlert } = await import("@/lib/correlation");
     await processAlert(normalized);
     await prisma.webhookEvent.update({

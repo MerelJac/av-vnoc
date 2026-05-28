@@ -36,6 +36,11 @@ export const authOptions: AuthOptions = {
       if (user) {
         token.id = user.id;
         token.isSuperAdmin = user.isSuperAdmin;
+        const profile = await prisma.profile.findUnique({
+          where: { userId: user.id },
+          select: { vnocRole: true },
+        });
+        token.vnocRole = profile?.vnocRole ?? null;
       }
       return token;
     },
@@ -44,6 +49,7 @@ export const authOptions: AuthOptions = {
       if (session.user) {
         session.user.id = token.id as string;
         session.user.isSuperAdmin = token.isSuperAdmin as boolean;
+        session.user.vnocRole = token.vnocRole;
       }
       return session;
     },

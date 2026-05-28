@@ -1,5 +1,7 @@
 import { Platform, AlertSeverity } from "@prisma/client";
 
+export type DeviceStatus = "online" | "offline" | "unknown";
+
 export interface NormalizedAlert {
   platform: Platform;
   platformAlertId: string;
@@ -19,7 +21,7 @@ export interface NormalizedDevice {
   firmware?: string;
   ipAddress?: string;
   macAddress?: string;
-  status: "online" | "offline" | "unknown";
+  status: DeviceStatus;
   lastSeenAt?: Date;
   rawPayload: unknown;
 }
@@ -32,22 +34,9 @@ export interface PlatformAdapter {
   rebootDevice(platformId: string): Promise<void>;
 }
 
-const PLATFORM_VALUES = new Set<string>([
-  "POLY_LENS",
-  "YEALINK_YMCS",
-  "NEAT_PULSE",
-  "LOGITECH_SYNC",
-  "CISCO_CONTROL_HUB",
-  "UTELOGY",
-]);
+const PLATFORM_VALUES: Set<string> = new Set(Object.values(Platform));
 
-const ALERT_SEVERITY_VALUES = new Set<string>([
-  "CRITICAL",
-  "HIGH",
-  "MEDIUM",
-  "LOW",
-  "INFO",
-]);
+const ALERT_SEVERITY_VALUES: Set<string> = new Set(Object.values(AlertSeverity));
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -69,7 +58,7 @@ export function isNormalizedAlert(value: unknown): value is NormalizedAlert {
   );
 }
 
-const DEVICE_STATUS_VALUES = new Set<string>(["online", "offline", "unknown"]);
+const DEVICE_STATUS_VALUES: Set<string> = new Set<DeviceStatus>(["online", "offline", "unknown"]);
 
 export function isNormalizedDevice(value: unknown): value is NormalizedDevice {
   if (!isRecord(value)) return false;

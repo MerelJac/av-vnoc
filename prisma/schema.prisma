@@ -242,20 +242,20 @@ model WebhookEvent {
   receivedAt  DateTime  @default(now())
 
   @@unique([platform, eventId])
-  @@index([platform, eventId])
 }
 
 model AlertGroup {
   id         String         @id @default(uuid())
   type       AlertGroupType
   customerId String?
-  customer   Customer?      @relation(fields: [customerId], references: [id])
+  customer   Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
   siteId     String?
-  site       Site?          @relation(fields: [siteId], references: [id])
+  site       Site?          @relation(fields: [siteId], references: [id], onDelete: SetNull)
   roomId     String?
-  room       Room?          @relation(fields: [roomId], references: [id])
+  room       Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
   resolvedAt DateTime?
   createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
   alerts Alert[]
 
@@ -326,8 +326,8 @@ model TicketAction {
   id        String           @id @default(uuid())
   ticketId  String
   ticket    Ticket           @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User             @relation("TicketActionAuthor", fields: [userId], references: [id])
+  userId    String?
+  user      User?            @relation("TicketActionAuthor", fields: [userId], references: [id], onDelete: SetNull)
   type      TicketActionType
   body      String?
   createdAt DateTime         @default(now())

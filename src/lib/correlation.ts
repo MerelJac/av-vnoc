@@ -114,6 +114,29 @@ async function handleRoomOutage(
   }
 }
 
+async function persistAlert(
+  normalized: NormalizedAlert,
+  deviceId: string | null,
+  roomId: string | null
+): Promise<{ id: string; roomId: string | null; title: string; severity: AlertSeverity; description: string | null }> {
+  const autoCloseAt = new Date(normalized.receivedAt.getTime() + 60_000);
+  return prisma.alert.create({
+    data: {
+      platform: normalized.platform,
+      platformAlertId: normalized.platformAlertId,
+      deviceId,
+      roomId,
+      severity: normalized.severity,
+      status: "ACTIVE",
+      title: normalized.title,
+      description: normalized.description ?? null,
+      rawPayload: normalized.rawPayload as object,
+      receivedAt: normalized.receivedAt,
+      autoCloseAt,
+    },
+  });
+}
+
 export async function processAlert(
   normalized: NormalizedAlert
 ): Promise<CorrelationResult> {
@@ -147,23 +170,7 @@ export async function processAlert(
   });
 
   // Pass 2: Alert persistence with flap suppression (autoCloseAt = receivedAt + 60 seconds)
-  const autoCloseAt = new Date(normalized.receivedAt.getTime() + 60_000);
-
-  const alert = await prisma.alert.create({
-    data: {
-      platform: normalized.platform,
-      platformAlertId: normalized.platformAlertId,
-      deviceId: device?.id ?? null,
-      roomId: device?.roomId ?? null,
-      severity: normalized.severity,
-      status: "ACTIVE",
-      title: normalized.title,
-      description: normalized.description ?? null,
-      rawPayload: normalized.rawPayload as object,
-      receivedAt: normalized.receivedAt,
-      autoCloseAt,
-    },
-  });
+  const alert = await persistAlert(normalized, device?.id ?? null, device?.roomId ?? null);
 
   // Pass 3: Pattern grouping — call assignAlertGroup
   await assignAlertGroup(alert, device as DeviceWithRoom | null);

@@ -85,6 +85,8 @@ model User {
   memberships         OrganizationMember[]
   sentInvites         Invite[]
   passwordResetTokens PasswordResetToken[]
+  assignedTickets     Ticket[]       @relation("TicketAssignee")
+  ticketActions       TicketAction[] @relation("TicketActionAuthor")
 }
 
 model Organization {
@@ -289,4 +291,45 @@ model Alert {
   @@index([deviceId])
   @@index([roomId])
   @@index([groupId])
+}
+
+model Ticket {
+  id          String         @id @default(uuid())
+  alertId     String         @unique
+  alert       Alert          @relation(fields: [alertId], references: [id])
+  customerId  String?
+  customer    Customer?      @relation(fields: [customerId], references: [id])
+  assignedTo  String?
+  assignee    User?          @relation("TicketAssignee", fields: [assignedTo], references: [id])
+  priority    TicketPriority
+  status      TicketStatus   @default(OPEN)
+  title       String
+  description String?
+  rootCause   String?
+  resolution  String?
+  slaDeadline DateTime
+  openedAt    DateTime       @default(now())
+  resolvedAt  DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  actions TicketAction[]
+
+  @@index([assignedTo])
+  @@index([status])
+  @@index([customerId])
+}
+
+model TicketAction {
+  id        String           @id @default(uuid())
+  ticketId  String
+  ticket    Ticket           @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User             @relation("TicketActionAuthor", fields: [userId], references: [id])
+  type      TicketActionType
+  body      String?
+  createdAt DateTime         @default(now())
+
+  @@index([ticketId])
 }

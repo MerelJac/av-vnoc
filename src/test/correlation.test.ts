@@ -11,6 +11,7 @@ vi.mock('@/lib/prisma', () => ({
     alertGroup: {
       findFirst: vi.fn(),
       create: vi.fn(),
+      count: vi.fn(),
     },
     device: {
       findUnique: vi.fn(),
@@ -107,5 +108,96 @@ describe('processAlert - Pass 2: Alert persistence with autoCloseAt', () => {
     const createCall = vi.mocked(prisma.alert.create).mock.calls[0][0]
     const autoCloseAt = createCall.data.autoCloseAt as Date
     expect(autoCloseAt.getTime()).toBe(receivedAt.getTime() + 60_000)
+  })
+})
+
+describe('processAlert - Pass 3: Pattern grouping', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  const setupMocks = (recentRoomAlertCount: number) => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({
+      id: 'device-1',
+      roomId: 'room-1',
+      room: {
+        id: 'room-1',
+        siteId: 'site-1',
+        site: {
+          id: 'site-1',
+          customerId: 'customer-1',
+          customer: { id: 'customer-1', name: 'Acme' },
+        },
+      },
+    } as any)
+    vi.mocked(prisma.alert.create).mockResolvedValue({ id: 'new-alert-1', roomId: 'room-1', title: 'Device offline', severity: 'HIGH', description: null } as any)
+    vi.mocked(prisma.alert.count).mockResolvedValue(recentRoomAlertCount)
+    vi.mocked(prisma.alertGroup.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.alertGroup.create).mockResolvedValue({ id: 'group-1' } as any)
+    vi.mocked(prisma.alertGroup.count).mockResolvedValue(0)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.ticket.create).mockResolvedValue({ id: 'ticket-1', title: 'Device offline', priority: 'P2' } as any)
+    vi.mocked(prisma.activityLog.create).mockResolvedValue({} as any)
+  }
+
+  it('creates DEVICE_FAULT group when only 1 device alert in room', async () => {
+    setupMocks(0) // no other recent alerts in room
+
+    await processAlert(makeAlert())
+
+    const createCalls = vi.mocked(prisma.alertGroup.create).mock.calls
+    expect(createCalls[0][0].data.type).toBe('DEVICE_FAULT')
+  })
+
+  it('creates ROOM_OUTAGE group when 2+ devices alert in same room', async () => {
+    setupMocks(1) // one other recent alert in room
+
+    await processAlert(makeAlert())
+
+    const createCalls = vi.mocked(prisma.alertGroup.create).mock.calls
+    expect(createCalls[0][0].data.type).toBe('ROOM_OUTAGE')
+  })
+})
+
+describe('processAlert - Ticket auto-creation', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('creates a P1 ticket with 1h SLA for CRITICAL alert', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.alert.create).mockResolvedValue({ id: 'alert-1', roomId: null, title: 'Critical alert', severity: 'CRITICAL', description: null } as any)
+    vi.mocked(prisma.alert.count).mockResolvedValue(0)
+    vi.mocked(prisma.alertGroup.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.alertGroup.create).mockResolvedValue({ id: 'group-1' } as any)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.ticket.create).mockResolvedValue({ id: 'ticket-1', title: 'Critical alert', priority: 'P1' } as any)
+    vi.mocked(prisma.activityLog.create).mockResolvedValue({} as any)
+
+    const before = Date.now()
+    await processAlert(makeAlert({ severity: 'CRITICAL' as AlertSeverity }))
+    const after = Date.now()
+
+    const ticketCall = vi.mocked(prisma.ticket.create).mock.calls[0][0]
+    expect(ticketCall.data.priority).toBe('P1')
+
+    const slaMs = (ticketCall.data.slaDeadline as Date).getTime()
+    expect(slaMs).toBeGreaterThanOrEqual(before + 3_600_000 - 100)
+    expect(slaMs).toBeLessThanOrEqual(after + 3_600_000 + 100)
+  })
+
+  it('emits alert_created and ticket_opened SSE events', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.alert.create).mockResolvedValue({ id: 'alert-1', roomId: null, title: 'Test', severity: 'HIGH', description: null } as any)
+    vi.mocked(prisma.alert.count).mockResolvedValue(0)
+    vi.mocked(prisma.alertGroup.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.alertGroup.create).mockResolvedValue({ id: 'group-1' } as any)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.ticket.create).mockResolvedValue({ id: 'ticket-1', title: 'Test', priority: 'P2' } as any)
+    vi.mocked(prisma.activityLog.create).mockResolvedValue({} as any)
+
+    await processAlert(makeAlert())
+
+    expect(emitSseEvent).toHaveBeenCalledWith('alert_created', expect.objectContaining({ id: 'alert-1' }))
+    expect(emitSseEvent).toHaveBeenCalledWith('ticket_opened', expect.objectContaining({ id: 'ticket-1' }))
   })
 })

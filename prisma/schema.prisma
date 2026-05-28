@@ -269,11 +269,11 @@ model Alert {
   platform        Platform
   platformAlertId String
   deviceId        String?
-  device          Device?       @relation(fields: [deviceId], references: [id])
+  device          Device?       @relation(fields: [deviceId], references: [id], onDelete: SetNull)
   roomId          String?
-  room            Room?         @relation(fields: [roomId], references: [id])
+  room            Room?         @relation(fields: [roomId], references: [id], onDelete: SetNull)
   groupId         String?
-  group           AlertGroup?   @relation(fields: [groupId], references: [id])
+  group           AlertGroup?   @relation(fields: [groupId], references: [id], onDelete: SetNull)
   severity        AlertSeverity
   status          AlertStatus   @default(ACTIVE)
   title           String
@@ -297,7 +297,7 @@ model Alert {
 model Ticket {
   id          String         @id @default(uuid())
   alertId     String         @unique
-  alert       Alert          @relation(fields: [alertId], references: [id])
+  alert       Alert          @relation(fields: [alertId], references: [id], onDelete: Restrict)
   customerId  String?
   customer    Customer?      @relation(fields: [customerId], references: [id])
   assignedTo  String?

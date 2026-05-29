@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { useSSE } from "@/hooks/useSSE";
 import Link from "next/link";
 import { AlertSeverity, AlertStatus, Platform } from "@prisma/client";
+import { PlatformPill } from "@/app/components/ui/PlatformPill";
 
 interface Alert {
   id: string;
@@ -96,7 +97,7 @@ export function AlertsTable({ initial }: { initial: Alert[] }) {
                   {alert.device?.room?.name ?? alert.device?.name ?? "—"}
                 </td>
                 <td className="px-4 py-3 text-muted hidden lg:table-cell">
-                  {alert.platform.replace("_", " ")}
+                  <PlatformPill platform={alert.platform} />
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${STATUS_PILL[alert.status]}`}>

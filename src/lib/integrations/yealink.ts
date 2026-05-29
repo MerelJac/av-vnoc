@@ -141,6 +141,8 @@ export async function createYealinkAdapter(): Promise<PlatformAdapter> {
 
     async fetchRecentAlerts(_since: Date): Promise<NormalizedAlert[]> {
       const token = await ensureToken();
+      // YMCS listAlarms has no time-range filter — we fetch all alarms and filter
+      // status=1 in JS. correlation.ts dedup prevents re-processing old alarms.
       const allAlarms = await fetchAllPages<YmcsAlarm>(baseUrl, "/v2/dm/listAlarms", token, {});
       const activeAlarms = allAlarms.filter((a) => a.status === 1);
 
@@ -162,8 +164,13 @@ export async function createYealinkAdapter(): Promise<PlatformAdapter> {
 
     verifyWebhookSignature(_payload: string, sig: string): boolean {
       if (!webhookSecret || !sig) return false;
-      if (sig.length !== webhookSecret.length) return false;
-      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(webhookSecret));
+      // Pad both buffers to a fixed size so timingSafeEqual runs unconditionally,
+      // preventing length-based timing side-channels.
+      const a = Buffer.alloc(256);
+      const b = Buffer.alloc(256);
+      Buffer.from(sig).copy(a);
+      Buffer.from(webhookSecret).copy(b);
+      return crypto.timingSafeEqual(a, b);
     },
 
     normalizeWebhookPayload(_raw: unknown): NormalizedAlert | null {

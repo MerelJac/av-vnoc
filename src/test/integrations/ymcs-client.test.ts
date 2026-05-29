@@ -118,4 +118,14 @@ describe("ymcsGet", () => {
     expect(init.method).toBe("GET");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer tok-456");
   });
+
+  it("throws YmcsApiError on non-200", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response("Not Found", { status: 404 }))
+    );
+    await expect(
+      ymcsGet(BASE_URL, "/v2/dm/statistics/deviceCount", "tok")
+    ).rejects.toThrow(YmcsApiError);
+  });
 });

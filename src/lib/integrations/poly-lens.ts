@@ -110,7 +110,10 @@ function toDeviceStatus(connected: boolean): DeviceStatus {
   return connected ? "online" : "offline";
 }
 
-async function getAccessToken(clientId: string, clientSecret: string): Promise<string> {
+async function getAccessToken(
+  clientId: string,
+  clientSecret: string,
+): Promise<{ accessToken: string; expiresInMs: number }> {
   const params = new URLSearchParams({
     grant_type: "client_credentials",
     client_id: clientId,
@@ -128,7 +131,10 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
   }
 
   const json = (await res.json()) as { access_token: string; expires_in: number };
-  return json.access_token;
+  return {
+    accessToken: json.access_token,
+    expiresInMs: json.expires_in * 1000,
+  };
 }
 
 // Fetches all pages of a device query, following nextToken pagination.
@@ -217,8 +223,9 @@ export async function createPolyLensAdapter(): Promise<PlatformAdapter> {
     const isExpiringSoon = !tokenExpiresAt || tokenExpiresAt - now < bufferMs;
 
     if (!accessToken || isExpiringSoon) {
-      accessToken = await getAccessToken(clientId, clientSecret);
-      tokenExpiresAt = now + 24 * 3_600_000 - bufferMs;
+      const result = await getAccessToken(clientId, clientSecret);
+      accessToken = result.accessToken;
+      tokenExpiresAt = now + result.expiresInMs - bufferMs;
       await updateConfig(Platform.POLY_LENS, { accessToken, tokenExpiresAt, tenantId });
     }
 

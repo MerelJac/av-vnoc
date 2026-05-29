@@ -14,6 +14,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     platformCredential: {
       findMany: vi.fn(),
+      findUnique: vi.fn(),
       upsert: vi.fn(),
     },
   },
@@ -24,6 +25,7 @@ import { prisma } from "@/lib/prisma";
 
 const mockSession = vi.mocked(getServerSession);
 const mockFindMany = vi.mocked(prisma.platformCredential.findMany);
+const mockFindUnique = vi.mocked(prisma.platformCredential.findUnique);
 const mockUpsert = vi.mocked(prisma.platformCredential.upsert);
 
 beforeEach(() => {
@@ -69,6 +71,32 @@ describe("GET /api/integrations", () => {
     expect(body.data[0].clientSecret).toBe("••••••••");
     // config should be returned (not masked) so tenantId is visible
     expect(body.data[0].config).toEqual({ tenantId: "tenant-uuid" });
+  });
+
+  it("strips accessToken and tokenExpiresAt from config in GET response", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindMany.mockResolvedValueOnce([
+      {
+        id: "cred-1",
+        platform: "POLY_LENS" as never,
+        clientId: "cid",
+        clientSecret: "secret",
+        apiKey: null,
+        webhookSecret: null,
+        config: { tenantId: "tenant-uuid", accessToken: "live-bearer-token", tokenExpiresAt: 9999999 },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const req = new NextRequest("http://localhost/api/integrations");
+    const res = await GET(req);
+    const body = (await res.json()) as { data: Array<{ config: Record<string, unknown> }> };
+
+    expect(res.status).toBe(200);
+    expect(body.data[0].config).toEqual({ tenantId: "tenant-uuid" });
+    expect(body.data[0].config).not.toHaveProperty("accessToken");
+    expect(body.data[0].config).not.toHaveProperty("tokenExpiresAt");
   });
 
   it("masks apiKey and webhookSecret in GET response", async () => {
@@ -130,6 +158,10 @@ describe("PUT /api/integrations", () => {
 
   it("upserts credentials and config for superAdmin", async () => {
     mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    // findUnique is called to read existing config when clientId/clientSecret are rotated
+    mockFindUnique.mockResolvedValueOnce({
+      config: { tenantId: "tenant-abc", accessToken: "old-token", tokenExpiresAt: 12345 },
+    } as never);
     mockUpsert.mockResolvedValueOnce({} as never);
 
     const req = new NextRequest("http://localhost/api/integrations", {
@@ -151,9 +183,33 @@ describe("PUT /api/integrations", () => {
         update: expect.objectContaining({
           clientId: "cid",
           clientSecret: "sec",
+          // accessToken and tokenExpiresAt are stripped; tenantId is preserved
           config: { tenantId: "tenant-abc" },
         }),
       })
     );
+  });
+
+  it("clears cached accessToken when clientSecret is rotated", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindUnique.mockResolvedValueOnce({
+      config: { tenantId: "t-uuid", accessToken: "stale-token", tokenExpiresAt: 99999999 },
+    } as never);
+    mockUpsert.mockResolvedValueOnce({} as never);
+
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({ platform: "POLY_LENS", clientSecret: "new-secret" }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(200);
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as { update: { config?: Record<string, unknown> } };
+    const savedConfig = upsertCall.update.config ?? {};
+    expect(savedConfig).not.toHaveProperty("accessToken");
+    expect(savedConfig).not.toHaveProperty("tokenExpiresAt");
+    expect(savedConfig).toHaveProperty("tenantId", "t-uuid");
   });
 });

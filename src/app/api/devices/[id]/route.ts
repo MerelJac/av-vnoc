@@ -10,7 +10,12 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const body = await req.json() as { roomId?: string | null };
+  let body: { roomId?: string | null };
+  try {
+    body = await req.json() as { roomId?: string | null };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
 
   const device = await prisma.device.update({
     where: { id },

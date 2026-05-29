@@ -18,10 +18,13 @@ const PLATFORMS = [
     id: "YEALINK_YMCS",
     label: "Yealink YMCS",
     credFields: [
-      { key: "apiKey", label: "API Key", type: "password" as const },
-      { key: "webhookSecret", label: "Webhook Secret", type: "password" as const },
+      { key: "clientId", label: "Client ID", type: "text" as const },
+      { key: "clientSecret", label: "Client Secret", type: "password" as const },
+      { key: "webhookSecret", label: "Webhook Verification Token (from YMCS event subscription)", type: "password" as const },
     ],
-    configFields: [],
+    configFields: [
+      { key: "region", label: "Region (us / eu / au)", type: "text" as const },
+    ],
   },
 ] as const;
 

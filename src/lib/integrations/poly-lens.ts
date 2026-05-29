@@ -1,34 +1,113 @@
-import crypto from "crypto";
 import { Platform, AlertSeverity } from "@prisma/client";
 import { NormalizedAlert, NormalizedDevice, PlatformAdapter, DeviceStatus } from "./types";
 import { getCredential, updateConfig } from "./credentials";
+import { executeGraphQL } from "./graphql-client";
 
-const API_BASE = process.env.POLY_LENS_API_BASE ?? "https://api.lens.poly.com";
+const AUTH_ENDPOINT = "https://login.lens.poly.com/oauth/token";
+const GRAPHQL_ENDPOINT = "https://api.silica-prod01.io.lens.poly.com/graphql";
 
-const ALERT_EVENT_TYPES = new Set(["device.status.changed", "device.alert.created"]);
-
-function statusToSeverity(status: string): AlertSeverity | null {
-  switch (status.toLowerCase()) {
-    case "offline":
-      return AlertSeverity.HIGH;
-    case "critical":
-      return AlertSeverity.CRITICAL;
-    case "warning":
-      return AlertSeverity.MEDIUM;
-    default:
-      return null;
+const SYNC_DEVICES_QUERY = `
+  query SyncDevices($tenantId: ID!, $params: DeviceFindArgs) {
+    tenant(id: $tenantId) {
+      inventory {
+        deviceSearch(params: $params) {
+          edges {
+            node {
+              id
+              name
+              connected
+              hardwareModel
+              softwareVersion
+              macAddress
+              siteId
+              roomId
+            }
+          }
+          pageInfo {
+            totalCount
+            countOnPage
+            nextToken
+            hasNextPage
+          }
+        }
+      }
+    }
   }
+`;
+
+// Poly Lens does not have a time-filtered alert endpoint. We query for
+// currently disconnected devices on each cron cycle and treat each as a
+// potential alert. The correlation engine's dedup pass prevents duplicate
+// tickets from repeated polls of the same offline device.
+const OFFLINE_DEVICES_QUERY = `
+  query GetOfflineDevices($tenantId: ID!, $params: DeviceFindArgs) {
+    tenant(id: $tenantId) {
+      inventory {
+        deviceSearch(params: $params) {
+          edges {
+            node {
+              id
+              name
+              connected
+              hardwareModel
+              siteId
+              roomId
+            }
+          }
+          pageInfo {
+            nextToken
+            hasNextPage
+          }
+        }
+      }
+    }
+  }
+`;
+
+// NOTE: Exact mutation name TBD — verify in API Playground with real credentials.
+const REBOOT_MUTATION = `
+  mutation RebootDevice($deviceId: ID!) {
+    rebootDevice(deviceId: $deviceId) {
+      success
+      message
+    }
+  }
+`;
+
+interface PolyDevice {
+  id: string;
+  name: string;
+  connected: boolean;
+  hardwareModel: string | null;
+  softwareVersion: string | null;
+  macAddress: string | null;
+  siteId: string | null;
+  roomId: string | null;
 }
 
-function toDeviceStatus(status: string): DeviceStatus {
-  const lower = status.toLowerCase();
-  if (lower === "online") return "online";
-  if (lower === "offline") return "offline";
-  return "unknown";
+interface DeviceEdge {
+  node: PolyDevice;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+interface DevicesPage {
+  edges: DeviceEdge[];
+  pageInfo: { nextToken: string | null; hasNextPage: boolean };
+}
+
+interface TenantResponse {
+  tenant: {
+    inventory: {
+      deviceSearch: DevicesPage;
+    };
+  };
+}
+
+interface RebootResponse {
+  rebootDevice: { success: boolean; message: string };
+}
+
+function toDeviceStatus(connected: boolean): DeviceStatus {
+  return connected ? "online" : "offline";
 }
 
 async function getAccessToken(clientId: string, clientSecret: string): Promise<string> {
@@ -38,9 +117,9 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
     client_secret: clientSecret,
   });
 
-  const res = await fetch(`${API_BASE}/oauth/token`, {
+  const res = await fetch(AUTH_ENDPOINT, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: { "content-type": "application/x-www-form-urlencoded" },
     body: params.toString(),
   });
 
@@ -48,8 +127,63 @@ async function getAccessToken(clientId: string, clientSecret: string): Promise<s
     throw new Error(`Poly Lens token request failed: ${res.status} ${res.statusText}`);
   }
 
-  const json = (await res.json()) as Record<string, unknown>;
-  return json.access_token as string;
+  const json = (await res.json()) as { access_token: string; expires_in: number };
+  return json.access_token;
+}
+
+// Fetches all pages of a device query, following nextToken pagination.
+// Poly Lens uses Relay-style edges/node rather than items arrays.
+async function fetchAllDevicePages(
+  token: string,
+  tenantId: string,
+  query: string,
+  extraParams: Record<string, unknown> = {},
+): Promise<PolyDevice[]> {
+  const devices: PolyDevice[] = [];
+  let nextToken: string | null = null;
+
+  do {
+    const data = await executeGraphQL<TenantResponse>({
+      endpoint: GRAPHQL_ENDPOINT,
+      token,
+      query,
+      variables: {
+        tenantId,
+        params: { pageSize: 500, nextToken, ...extraParams },
+      },
+    });
+
+    const page = data.tenant.inventory.deviceSearch;
+    devices.push(...page.edges.map((e) => e.node));
+    nextToken = page.pageInfo.hasNextPage ? page.pageInfo.nextToken : null;
+  } while (nextToken !== null);
+
+  return devices;
+}
+
+function deviceToNormalized(d: PolyDevice): NormalizedDevice {
+  return {
+    platform: Platform.POLY_LENS,
+    platformId: d.id,
+    name: d.name,
+    model: d.hardwareModel ?? undefined,
+    firmware: d.softwareVersion ?? undefined,
+    macAddress: d.macAddress ?? undefined,
+    status: toDeviceStatus(d.connected),
+    rawPayload: d,
+  };
+}
+
+function offlineDeviceToAlert(d: PolyDevice): NormalizedAlert {
+  return {
+    platform: Platform.POLY_LENS,
+    platformAlertId: `offline:${d.id}`,
+    platformDeviceId: d.id,
+    severity: AlertSeverity.HIGH,
+    title: `Device offline: ${d.name}`,
+    rawPayload: d,
+    receivedAt: new Date(),
+  };
 }
 
 export async function createPolyLensAdapter(): Promise<PlatformAdapter> {
@@ -59,23 +193,34 @@ export async function createPolyLensAdapter(): Promise<PlatformAdapter> {
     throw new Error("POLY_LENS credentials not configured");
   }
 
-  const resolvedCred = cred;
-  const config = (resolvedCred.config as Record<string, unknown>) ?? {};
-  let accessToken = config.accessToken as string | undefined;
-  let tokenExpiresAt = config.tokenExpiresAt as number | undefined;
-  const webhookSecret = resolvedCred.webhookSecret ?? undefined;
+  if (!cred.clientId || !cred.clientSecret) {
+    throw new Error("POLY_LENS clientId and clientSecret are required");
+  }
+
+  const { clientId, clientSecret } = cred;
+  const storedConfig = (cred.config as Record<string, unknown>) ?? {};
+
+  // tenantId is the Poly Lens tenant UUID from Admin Portal → Account Settings.
+  // It must be saved to PlatformCredential.config.tenantId via the Settings page.
+  const tenantId = storedConfig.tenantId as string | undefined;
+  if (!tenantId) {
+    throw new Error("POLY_LENS tenantId is required — set it in Settings → Poly Lens");
+  }
+
+  // Token is cached in PlatformCredential.config to avoid re-fetching on
+  // every cron run. Refreshed 60 seconds before the 24-hour TTL.
+  let accessToken = storedConfig.accessToken as string | undefined;
+  let tokenExpiresAt = storedConfig.tokenExpiresAt as number | undefined;
 
   async function ensureToken(): Promise<string> {
     const now = Date.now();
-    const isExpiringSoon = !tokenExpiresAt || tokenExpiresAt - now < 60_000;
+    const bufferMs = 60_000;
+    const isExpiringSoon = !tokenExpiresAt || tokenExpiresAt - now < bufferMs;
 
     if (!accessToken || isExpiringSoon) {
-      if (!resolvedCred.clientId || !resolvedCred.clientSecret) {
-        throw new Error("POLY_LENS clientId and clientSecret are required for token refresh");
-      }
-      accessToken = await getAccessToken(resolvedCred.clientId, resolvedCred.clientSecret);
-      tokenExpiresAt = now + 3_600_000;
-      await updateConfig(Platform.POLY_LENS, { accessToken, tokenExpiresAt });
+      accessToken = await getAccessToken(clientId, clientSecret);
+      tokenExpiresAt = now + 24 * 3_600_000 - bufferMs;
+      await updateConfig(Platform.POLY_LENS, { accessToken, tokenExpiresAt, tenantId });
     }
 
     return accessToken;
@@ -84,116 +229,48 @@ export async function createPolyLensAdapter(): Promise<PlatformAdapter> {
   return {
     async syncDevices(): Promise<NormalizedDevice[]> {
       const token = await ensureToken();
-      const res = await fetch(`${API_BASE}/v2/devices?limit=500`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        throw new Error(`Poly Lens syncDevices failed: ${res.status} ${res.statusText}`);
-      }
-
-      const json = (await res.json()) as Record<string, unknown>;
-      const items = (json.devices ?? json.items ?? []) as Record<string, unknown>[];
-
-      return items.map((d): NormalizedDevice => ({
-        platform: Platform.POLY_LENS,
-        platformId: String(d.id),
-        name: String(d.displayName ?? d.name ?? d.id),
-        model: d.model != null ? String(d.model) : undefined,
-        firmware: d.firmwareVersion != null ? String(d.firmwareVersion) : undefined,
-        ipAddress: d.ipAddress != null ? String(d.ipAddress) : undefined,
-        macAddress: d.macAddress != null ? String(d.macAddress) : undefined,
-        status: toDeviceStatus(String(d.status ?? "unknown")),
-        lastSeenAt: d.lastSeenAt != null ? new Date(String(d.lastSeenAt)) : undefined,
-        rawPayload: d,
-      }));
+      const devices = await fetchAllDevicePages(token, tenantId, SYNC_DEVICES_QUERY);
+      return devices.map(deviceToNormalized);
     },
 
-    async fetchRecentAlerts(since: Date): Promise<NormalizedAlert[]> {
+    // Poly Lens has no time-filtered alert endpoint. We filter for connected=false
+    // on each cron cycle. The `since` param is accepted for interface compatibility
+    // but unused — correlation.ts dedup prevents duplicate tickets.
+    async fetchRecentAlerts(_since: Date): Promise<NormalizedAlert[]> {
       const token = await ensureToken();
-      const res = await fetch(
-        `${API_BASE}/v2/alerts?since=${since.toISOString()}&limit=200`,
-        { headers: { Authorization: `Bearer ${token}` } },
+      const offline = await fetchAllDevicePages(
+        token,
+        tenantId,
+        OFFLINE_DEVICES_QUERY,
+        { filter: { field: "connected", contains: "false" } },
       );
-
-      if (!res.ok) {
-        throw new Error(`Poly Lens fetchRecentAlerts failed: ${res.status} ${res.statusText}`);
-      }
-
-      const json = (await res.json()) as Record<string, unknown>;
-      const items = (json.alerts ?? json.items ?? []) as Record<string, unknown>[];
-
-      const alerts: NormalizedAlert[] = [];
-      for (const a of items) {
-        const severity = statusToSeverity(String(a.status ?? ""));
-        if (severity === null) continue;
-
-        const device = isRecord(a.device) ? a.device : {};
-        const deviceId = String(a.deviceId ?? device.id ?? "");
-        const deviceName = String(device.displayName ?? device.name ?? deviceId);
-
-        alerts.push({
-          platform: Platform.POLY_LENS,
-          platformAlertId: String(a.id ?? a.alertId ?? ""),
-          platformDeviceId: deviceId,
-          severity,
-          title: `Device ${String(a.status ?? "")}: ${deviceName}`,
-          description: a.message != null ? String(a.message) : undefined,
-          rawPayload: a,
-          receivedAt: new Date(),
-        });
-      }
-
-      return alerts;
+      return offline.map(offlineDeviceToAlert);
     },
 
-    normalizeWebhookPayload(raw: unknown): NormalizedAlert | null {
-      if (!isRecord(raw)) return null;
-
-      const eventType = String(raw.eventType ?? "");
-      if (!ALERT_EVENT_TYPES.has(eventType)) return null;
-
-      const device = isRecord(raw.device) ? raw.device : {};
-      const deviceStatus = String(device.status ?? "");
-      const severity = statusToSeverity(deviceStatus);
-      if (severity === null) return null;
-
-      const deviceId = String(device.id ?? "");
-      const deviceName = String(device.displayName ?? device.name ?? device.id ?? deviceId);
-
-      return {
-        platform: Platform.POLY_LENS,
-        platformAlertId: String(raw.eventId ?? ""),
-        platformDeviceId: deviceId,
-        severity,
-        title: `Device ${deviceStatus}: ${deviceName}`,
-        rawPayload: raw,
-        receivedAt: raw.timestamp != null ? new Date(String(raw.timestamp)) : new Date(),
-      };
+    // Poly Lens does not support webhooks — real-time is via GraphQL Subscriptions
+    // (WebSocket, see deviceStream subscription). Always returns null.
+    normalizeWebhookPayload(_raw: unknown): NormalizedAlert | null {
+      return null;
     },
 
-    verifyWebhookSignature(payload: string, sig: string): boolean {
-      if (!webhookSecret) return false;
-
-      const expected = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(payload)
-        .digest("hex");
-
-      if (sig.length !== expected.length) return false;
-
-      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+    // No webhook secret — always returns false.
+    verifyWebhookSignature(_payload: string, _sig: string): boolean {
+      return false;
     },
 
     async rebootDevice(platformId: string): Promise<void> {
       const token = await ensureToken();
-      const res = await fetch(`${API_BASE}/v2/devices/${platformId}/reboot`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+      const data = await executeGraphQL<RebootResponse>({
+        endpoint: GRAPHQL_ENDPOINT,
+        token,
+        query: REBOOT_MUTATION,
+        variables: { deviceId: platformId },
       });
 
-      if (!res.ok) {
-        throw new Error(`Poly Lens rebootDevice failed for ${platformId}: ${res.status} ${res.statusText}`);
+      if (!data.rebootDevice.success) {
+        throw new Error(
+          `Poly Lens reboot failed for device ${platformId}: ${data.rebootDevice.message}`
+        );
       }
     },
   };

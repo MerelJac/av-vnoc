@@ -1,12 +1,22 @@
 import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
 
-const ses = new SESClient({
-  region: process.env.SES_REGION!,
-  credentials: {
-    accessKeyId: process.env.SES_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.SES_SECRET_ACCESS_KEY!,
-  },
-});
+// Lazily initialized to avoid module-load failures when SES env vars are absent
+let _ses: SESClient | null = null;
+
+function getSesClient(): SESClient {
+  if (!_ses) {
+    const region = process.env.SES_REGION;
+    if (!region) throw new Error("SES_REGION is not configured");
+    _ses = new SESClient({
+      region,
+      credentials: {
+        accessKeyId: process.env.SES_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.SES_SECRET_ACCESS_KEY!,
+      },
+    });
+  }
+  return _ses;
+}
 
 export async function emailCsvFile({
   to,
@@ -49,11 +59,9 @@ export async function emailCsvFile({
     `--${boundary}--`,
   ].join("\r\n");
 
-  await ses.send(
+  await getSesClient().send(
     new SendRawEmailCommand({
       RawMessage: { Data: Buffer.from(rawMessage) },
     }),
   );
-
-  console.log(`✅ Email with CSV sent to ${to}`);
 }

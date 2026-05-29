@@ -1,14 +1,23 @@
 // lib/emailTemplates.ts
 import { SESClient, SendEmailCommand } from "@aws-sdk/client-ses";
 
-// Initialize once for all sends
-const ses = new SESClient({
-  region: process.env.SES_REGION!,
-  credentials: {
-    accessKeyId: process.env.SES_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.SES_SECRET_ACCESS_KEY!,
-  },
-});
+// Lazily initialized to avoid module-load failures when SES env vars are absent
+let _ses: SESClient | null = null;
+
+function getSesClient(): SESClient {
+  if (!_ses) {
+    const region = process.env.SES_REGION;
+    if (!region) throw new Error("SES_REGION is not configured");
+    _ses = new SESClient({
+      region,
+      credentials: {
+        accessKeyId: process.env.SES_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.SES_SECRET_ACCESS_KEY!,
+      },
+    });
+  }
+  return _ses;
+}
 
 /**
  * Generic SES send helper
@@ -29,7 +38,7 @@ export async function sendEmail({
     Destination: {
       ToAddresses: [to],
       BccAddresses: ["mjacobs@calloneonline.com"],
-    }, // Removed BccAddresses: ["mjacobs@calloneonline.com"]
+    },
     Message: {
       Subject: { Data: subject },
       Body: {
@@ -39,6 +48,5 @@ export async function sendEmail({
     },
   };
 
-  await ses.send(new SendEmailCommand(params));
-  console.log(`✅ Email sent to ${to}`);
+  await getSesClient().send(new SendEmailCommand(params));
 }

@@ -2,13 +2,23 @@
 import nodemailer from "nodemailer";
 import { SESClient, SendRawEmailCommand } from "@aws-sdk/client-ses";
 
-const ses = new SESClient({
-  region: process.env.SES_REGION!,
-  credentials: {
-    accessKeyId: process.env.SES_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.SES_SECRET_ACCESS_KEY!,
-  },
-});
+// Lazily initialized to avoid module-load failures when SES env vars are absent
+let _ses: SESClient | null = null;
+
+function getSesClient(): SESClient {
+  if (!_ses) {
+    const region = process.env.SES_REGION;
+    if (!region) throw new Error("SES_REGION is not configured");
+    _ses = new SESClient({
+      region,
+      credentials: {
+        accessKeyId: process.env.SES_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.SES_SECRET_ACCESS_KEY!,
+      },
+    });
+  }
+  return _ses;
+}
 
 // nodemailer SDK v2-style SES transport doesn't work with @aws-sdk v3.
 // Instead: build the raw MIME via nodemailer's streamTransport, then send
@@ -46,7 +56,7 @@ export async function sendEmailWithAttachment({
   }
   const rawMessage = Buffer.concat(chunks);
 
-  await ses.send(
+  await getSesClient().send(
     new SendRawEmailCommand({
       RawMessage: { Data: rawMessage },
     }),

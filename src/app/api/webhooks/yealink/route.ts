@@ -1,10 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createYealinkAdapter } from "@/lib/integrations/yealink";
+import { processAlert } from "@/lib/correlation";
+import { emitSseEvent } from "@/lib/sse-bus";
+import { AlertSeverity } from "@prisma/client";
+
+interface YmcsEventData {
+  id: string;
+  event: string;
+  mac: string;
+  model: string;
+}
+
+interface YmcsWebhookEvent {
+  id: string;
+  type: string;
+  createTime: number;
+  partyId: string;
+  data: YmcsEventData;
+}
+
+interface YmcsWebhookBody {
+  events: YmcsWebhookEvent[];
+}
+
+function isYmcsWebhookBody(value: unknown): value is YmcsWebhookBody {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "events" in value &&
+    Array.isArray((value as Record<string, unknown>).events)
+  );
+}
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const rawBody = await req.text();
-  const sig = req.headers.get("x-yealink-signature") ?? "";
+  const authHeader = req.headers.get("authorization") ?? "";
 
   let adapter: Awaited<ReturnType<typeof createYealinkAdapter>>;
   try {
@@ -13,66 +44,104 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Adapter unavailable" }, { status: 503 });
   }
 
-  const isValid = adapter.verifyWebhookSignature(rawBody, sig);
-  if (!isValid) {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
+  if (!adapter.verifyWebhookSignature(rawBody, authHeader)) {
+    return NextResponse.json({ error: "Invalid authorization token" }, { status: 401 });
   }
 
-  let payload: unknown;
+  let body: unknown;
   try {
-    payload = JSON.parse(rawBody) as unknown;
+    body = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const eventId =
-    typeof payload === "object" &&
-    payload !== null &&
-    "eventId" in payload &&
-    typeof (payload as Record<string, unknown>).eventId === "string"
-      ? ((payload as Record<string, unknown>).eventId as string)
-      : "";
-
-  const existing = await prisma.webhookEvent.findUnique({
-    where: { platform_eventId: { platform: "YEALINK_YMCS", eventId } },
-  });
-
-  if (existing) {
-    return NextResponse.json({ ok: true, deduped: true });
+  if (!isYmcsWebhookBody(body)) {
+    return NextResponse.json({ error: "Invalid webhook body shape" }, { status: 400 });
   }
 
-  const webhookEvent = await prisma.webhookEvent.create({
-    data: {
-      platform: "YEALINK_YMCS",
-      eventId,
-      payload: payload as object,
-    },
-  });
+  const results: Array<{ eventId: string; action: string }> = [];
 
-  const normalized = adapter.normalizeWebhookPayload(payload);
-
-  if (normalized === null) {
-    await prisma.webhookEvent.update({
-      where: { id: webhookEvent.id },
-      data: { processedAt: new Date() },
+  for (const event of body.events) {
+    const existing = await prisma.webhookEvent.findUnique({
+      where: { platform_eventId: { platform: "YEALINK_YMCS", eventId: event.id } },
     });
-    return NextResponse.json({ ok: true, ignored: true });
+
+    if (existing) {
+      results.push({ eventId: event.id, action: "deduped" });
+      continue;
+    }
+
+    const webhookRecord = await prisma.webhookEvent.create({
+      data: {
+        platform: "YEALINK_YMCS",
+        eventId: event.id,
+        payload: event as object,
+      },
+    });
+
+    try {
+      if (event.type === "alarm.created") {
+        const normalized = {
+          platform: "YEALINK_YMCS" as const,
+          platformAlertId: event.data.id,
+          platformDeviceId: event.data.mac,
+          severity: AlertSeverity.HIGH,
+          title: `${event.data.event}: ${event.data.model || "Device"} (${event.data.mac})`,
+          rawPayload: event,
+          receivedAt: new Date(event.createTime),
+        };
+
+        await processAlert(normalized);
+        results.push({ eventId: event.id, action: "alert_created" });
+
+      } else if (event.type === "alarm.recovered") {
+        const existingAlert = await prisma.alert.findFirst({
+          where: {
+            platform: "YEALINK_YMCS",
+            platformAlertId: event.data.id,
+            status: { in: ["ACTIVE", "ACKNOWLEDGED"] },
+          },
+        });
+
+        if (existingAlert) {
+          await prisma.alert.update({
+            where: { id: existingAlert.id },
+            data: { status: "RESOLVED", resolvedAt: new Date() },
+          });
+
+          await prisma.activityLog.create({
+            data: {
+              type: "auto_resolved",
+              platform: "YEALINK_YMCS",
+              alertId: existingAlert.id,
+              message: `Alert resolved via YMCS webhook: device ${event.data.mac} came back online`,
+            },
+          });
+
+          emitSseEvent("alert_resolved", { id: existingAlert.id });
+          emitSseEvent("kpi_updated", {});
+        }
+
+        results.push({ eventId: event.id, action: "alert_recovered" });
+
+      } else {
+        results.push({ eventId: event.id, action: "ignored_unknown_type" });
+      }
+
+      await prisma.webhookEvent.update({
+        where: { id: webhookRecord.id },
+        data: { processedAt: new Date() },
+      });
+
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      await prisma.webhookEvent.update({
+        where: { id: webhookRecord.id },
+        data: { error: message },
+      });
+      results.push({ eventId: event.id, action: "error" });
+    }
   }
 
-  try {
-    const { processAlert } = await import("@/lib/correlation");
-    await processAlert(normalized);
-    await prisma.webhookEvent.update({
-      where: { id: webhookEvent.id },
-      data: { processedAt: new Date() },
-    });
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    await prisma.webhookEvent.update({
-      where: { id: webhookEvent.id },
-      data: { error: message },
-    });
-    return NextResponse.json({ error: "Processing failed" }, { status: 500 });
-  }
+  return NextResponse.json({ ok: true, processed: results.length, results });
 }

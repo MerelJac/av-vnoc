@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export async function GET(_req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const customers = await prisma.customer.findMany({
+    orderBy: { name: "asc" },
+    include: {
+      sites: {
+        orderBy: { name: "asc" },
+        include: {
+          rooms: {
+            orderBy: { name: "asc" },
+            include: {
+              devices: { select: { id: true, status: true } },
+              _count: { select: { alerts: { where: { status: "ACTIVE" } } } },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const data = customers.map((customer) => ({
+    id: customer.id,
+    name: customer.name,
+    sites: customer.sites.map((site) => ({
+      id: site.id,
+      name: site.name,
+      city: site.city,
+      state: site.state,
+      rooms: site.rooms.map((room) => ({
+        id: room.id,
+        name: room.name,
+        totalDevices: room.devices.length,
+        onlineDevices: room.devices.filter((d) => d.status === "online").length,
+        activeAlerts: room._count.alerts,
+      })),
+    })),
+  }));
+
+  return NextResponse.json({ success: true, data });
+}

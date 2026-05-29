@@ -48,18 +48,29 @@ export async function PUT(req: NextRequest) {
 
   const platform = body.platform as Platform;
 
-  const updateData = {
-    clientId: body.clientId ?? null,
-    clientSecret: body.clientSecret ?? null,
-    apiKey: body.apiKey ?? null,
-    webhookSecret: body.webhookSecret ?? null,
-    ...(body.config !== undefined && { config: body.config as Prisma.InputJsonValue }),
-  };
+  const updateData: {
+    clientId?: string | null;
+    clientSecret?: string | null;
+    apiKey?: string | null;
+    webhookSecret?: string | null;
+    config?: Record<string, unknown>;
+  } = {};
+
+  if ("clientId" in body) updateData.clientId = body.clientId ?? null;
+  if ("clientSecret" in body) updateData.clientSecret = body.clientSecret ?? null;
+  if ("apiKey" in body) updateData.apiKey = body.apiKey ?? null;
+  if ("webhookSecret" in body) updateData.webhookSecret = body.webhookSecret ?? null;
+  if (body.config !== undefined) updateData.config = body.config;
+
+  const { config: configValue, ...scalarFields } = updateData;
+  const configEntry = configValue !== undefined
+    ? { config: configValue as Prisma.InputJsonValue }
+    : {};
 
   await prisma.platformCredential.upsert({
     where: { platform },
-    update: updateData,
-    create: { platform, ...updateData },
+    update: { ...scalarFields, ...configEntry },
+    create: { platform, ...scalarFields, ...configEntry },
   });
 
   return NextResponse.json({ success: true });

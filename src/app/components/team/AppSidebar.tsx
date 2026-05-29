@@ -162,7 +162,7 @@ export function AppSidebar({
             <>
               <SectionLabel label="Admin" />
               <SidebarLink href="/users" label="Users" onClick={onClose} />
-              <SidebarLink href="/settings/platform" label="Platform Settings" onClick={onClose} />
+              <SidebarLink href="/settings" label="Platform Settings" onClick={onClose} />
             </>
           )}
         </nav>

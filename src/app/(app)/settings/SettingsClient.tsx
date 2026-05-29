@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const PLATFORMS = [
   {
@@ -37,6 +37,7 @@ export function SettingsClient() {
   const [saved, setSaved] = useState<PlatformId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, FieldValues>>({});
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function onCredChange(platform: string, field: string, value: string) {
     setValues((prev) => ({
@@ -64,12 +65,20 @@ export function SettingsClient() {
     setSaved(null);
 
     const platformValues = values[platformId];
-    const body = {
+    const creds = platformValues?.creds ?? {};
+    const nonEmptyCreds = Object.fromEntries(
+      Object.entries(creds).filter(([, v]) => v !== "")
+    );
+
+    const config = platformValues?.config ?? {};
+    const nonEmptyConfig = Object.fromEntries(
+      Object.entries(config).filter(([, v]) => v !== "")
+    );
+
+    const body: Record<string, unknown> = {
       platform: platformId,
-      ...(platformValues?.creds ?? {}),
-      ...(Object.keys(platformValues?.config ?? {}).length > 0
-        ? { config: platformValues.config }
-        : {}),
+      ...nonEmptyCreds,
+      ...(Object.keys(nonEmptyConfig).length > 0 ? { config: nonEmptyConfig } : {}),
     };
 
     try {
@@ -85,7 +94,8 @@ export function SettingsClient() {
       }
 
       setSaved(platformId);
-      setTimeout(() => setSaved(null), 3000);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaved(null), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {

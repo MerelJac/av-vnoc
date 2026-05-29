@@ -70,9 +70,42 @@ describe("GET /api/integrations", () => {
     // config should be returned (not masked) so tenantId is visible
     expect(body.data[0].config).toEqual({ tenantId: "tenant-uuid" });
   });
+
+  it("masks apiKey and webhookSecret in GET response", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindMany.mockResolvedValueOnce([
+      {
+        id: "cred-2",
+        platform: "YEALINK_YMCS" as never,
+        clientId: null,
+        clientSecret: null,
+        apiKey: "real-api-key",
+        webhookSecret: "real-webhook-secret",
+        config: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    const req = new NextRequest("http://localhost/api/integrations");
+    const res = await GET(req);
+    const body = (await res.json()) as { data: Array<{ apiKey: string; webhookSecret: string }> };
+    expect(body.data[0].apiKey).toBe("••••••••");
+    expect(body.data[0].webhookSecret).toBe("••••••••");
+  });
 });
 
 describe("PUT /api/integrations", () => {
+  it("returns 403 when user is not superAdmin", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: false } } as never);
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({ platform: "POLY_LENS" }),
+      headers: { "content-type": "application/json" },
+    });
+    const res = await PUT(req);
+    expect(res.status).toBe(403);
+  });
+
   it("returns 401 when not authenticated", async () => {
     mockSession.mockResolvedValueOnce(null);
     const req = new NextRequest("http://localhost/api/integrations", {

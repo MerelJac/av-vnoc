@@ -31,11 +31,16 @@ export function AssignDeviceModal({ roomId, roomName, onClose, onAssigned }: Pro
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [assigning, setAssigning] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/devices?unassigned=true&limit=100")
       .then((r) => r.json())
-      .then((j) => { if (j.success) setDevices(j.data); })
+      .then((j) => {
+        if (j.success) setDevices(j.data);
+        else setError("Failed to load devices.");
+      })
+      .catch(() => setError("Failed to load devices."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -48,13 +53,24 @@ export function AssignDeviceModal({ roomId, roomName, onClose, onAssigned }: Pro
 
   const assign = async (deviceId: string) => {
     setAssigning(deviceId);
-    await fetch(`/api/devices/${deviceId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomId }),
-    });
-    setAssigning(null);
-    onAssigned();
+    setError(null);
+    try {
+      const res = await fetch(`/api/devices/${deviceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId }),
+      });
+      const json = await res.json() as { success?: boolean };
+      if (json.success) {
+        onAssigned();
+      } else {
+        setError("Failed to assign device. Please try again.");
+      }
+    } catch {
+      setError("Failed to assign device. Please try again.");
+    } finally {
+      setAssigning(null);
+    }
   };
 
   return (
@@ -76,6 +92,9 @@ export function AssignDeviceModal({ roomId, roomName, onClose, onAssigned }: Pro
           onChange={(e) => setSearch(e.target.value)}
           autoFocus
         />
+        {error && (
+          <p className="text-xs text-red-500 mb-2">{error}</p>
+        )}
         <div className="flex-1 overflow-y-auto space-y-1">
           {loading && <p className="text-sm text-muted-foreground py-4 text-center">Loading…</p>}
           {!loading && filtered.length === 0 && (

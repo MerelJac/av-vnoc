@@ -19,8 +19,8 @@ const SYNC_DEVICES_QUERY = `
               hardwareModel
               softwareVersion
               macAddress
-              siteId
-              roomId
+              site { id name }
+              room { id name }
             }
           }
           pageInfo {
@@ -50,8 +50,8 @@ const OFFLINE_DEVICES_QUERY = `
               name
               connected
               hardwareModel
-              siteId
-              roomId
+              site { id }
+              room { id }
             }
           }
           pageInfo {
@@ -81,8 +81,8 @@ interface PolyDevice {
   hardwareModel: string | null;
   softwareVersion: string | null;
   macAddress: string | null;
-  siteId: string | null;
-  roomId: string | null;
+  site: { id: string; name: string } | null;
+  room: { id: string } | null;
 }
 
 interface DeviceEdge {

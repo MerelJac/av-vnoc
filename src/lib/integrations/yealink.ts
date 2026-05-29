@@ -1,34 +1,89 @@
-import crypto from "crypto";
 import { Platform, AlertSeverity } from "@prisma/client";
 import { NormalizedAlert, NormalizedDevice, PlatformAdapter, DeviceStatus } from "./types";
-import { getCredential } from "./credentials";
+import { getCredential, updateConfig } from "./credentials";
+import { acquireYmcsToken, ymcsPost } from "./ymcs-client";
 
-const API_BASE = process.env.YEALINK_API_BASE ?? "https://open.ymcs.yealink.com";
-
-const ALERT_EVENT_TYPES = new Set([
-  "device.offline",
-  "device.critical",
-  "device.warning",
-  "device.fault",
-]);
-
-function yealinkEventToSeverity(eventType: string): AlertSeverity | null {
-  if (eventType === "device.offline") return AlertSeverity.HIGH;
-  if (eventType === "device.critical") return AlertSeverity.CRITICAL;
-  if (eventType === "device.warning") return AlertSeverity.MEDIUM;
-  if (eventType === "device.fault") return AlertSeverity.MEDIUM;
-  return null;
+interface YmcsDevice {
+  id: string;
+  mac: string;
+  sn: string;
+  name: string;
+  modelId: string;
+  siteId: string;
+  programVersion: string;
+  deviceStatus: string;
 }
 
-function toDeviceStatus(status: string): DeviceStatus {
-  const lower = status.toLowerCase();
-  if (lower === "online") return "online";
-  if (lower === "offline") return "offline";
+interface YmcsAlarm {
+  id: string;
+  event: string;
+  level: number;
+  mac: string;
+  model: string;
+  ip: string;
+  siteName: string;
+  status: number;
+  firstAlarmTime: number;
+  lastAlarmTime: number;
+}
+
+interface YmcsRebootResponse {
+  total: number;
+  successCount: number;
+  failureCount: number;
+  errors: Array<{ field: string; msg: string }>;
+}
+
+function regionToBaseUrl(region: string): string {
+  const r = region.toLowerCase();
+  if (r === "eu") return "https://eu-api.ymcs.yealink.com";
+  if (r === "au") return "https://au-api.ymcs.yealink.com";
+  return "https://us-api.ymcs.yealink.com";
+}
+
+function toDeviceStatus(ymcsStatus: string): DeviceStatus {
+  if (ymcsStatus === "online") return "online";
+  if (ymcsStatus === "offline") return "offline";
   return "unknown";
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function levelToSeverity(level: number): AlertSeverity {
+  if (level >= 3) return AlertSeverity.CRITICAL;
+  if (level === 2) return AlertSeverity.HIGH;
+  return AlertSeverity.MEDIUM;
+}
+
+async function fetchAllPages<T>(
+  baseUrl: string,
+  path: string,
+  token: string,
+  filter: Record<string, unknown> = {}
+): Promise<T[]> {
+  const results: T[] = [];
+  let skip = 0;
+  const limit = 100;
+  let total: number | undefined;
+
+  do {
+    const page = await ymcsPost<{ skip: number; limit: number; total: number; data: T[] }>(
+      baseUrl,
+      path,
+      token,
+      { skip, limit, autoCount: skip === 0, filter }
+    );
+    results.push(...page.data);
+    skip += page.data.length;
+
+    if (total === undefined) {
+      total = page.total;
+    }
+
+    // Stop when we have no more items or we've collected everything
+    if (page.data.length === 0) break;
+    if (total !== undefined && skip >= total) break;
+  } while (true);
+
+  return results;
 }
 
 export async function createYealinkAdapter(): Promise<PlatformAdapter> {
@@ -38,123 +93,89 @@ export async function createYealinkAdapter(): Promise<PlatformAdapter> {
     throw new Error("YEALINK_YMCS credentials not configured");
   }
 
-  const apiKey = cred.apiKey;
-  const webhookSecret = cred.webhookSecret ?? undefined;
+  if (!cred.clientId || !cred.clientSecret) {
+    throw new Error("YEALINK_YMCS clientId and clientSecret are required");
+  }
 
-  if (!apiKey) {
-    throw new Error("YEALINK_YMCS apiKey is required");
+  const { clientId, clientSecret } = cred;
+  const storedConfig = (cred.config as Record<string, unknown>) ?? {};
+  const region = (storedConfig.region as string | undefined) ?? "us";
+  const baseUrl = regionToBaseUrl(region);
+  const webhookSecret = cred.webhookSecret ?? null;
+
+  let accessToken = storedConfig.accessToken as string | undefined;
+  let tokenExpiresAt = storedConfig.tokenExpiresAt as number | undefined;
+
+  async function ensureToken(): Promise<string> {
+    const now = Date.now();
+    const bufferMs = 60_000;
+    const isExpiringSoon = !tokenExpiresAt || tokenExpiresAt - now < bufferMs;
+
+    if (!accessToken || isExpiringSoon) {
+      const result = await acquireYmcsToken(baseUrl, clientId, clientSecret);
+      accessToken = result.access_token;
+      tokenExpiresAt = now + result.expires_in * 1000 - bufferMs;
+      await updateConfig(Platform.YEALINK_YMCS, { accessToken, tokenExpiresAt, region });
+    }
+
+    return accessToken;
   }
 
   return {
     async syncDevices(): Promise<NormalizedDevice[]> {
-      const res = await fetch(`${API_BASE}/v1/devices?pageSize=500`, {
-        headers: { "X-Api-Key": apiKey },
-      });
+      const token = await ensureToken();
+      const devices = await fetchAllPages<YmcsDevice>(baseUrl, "/v2/dm/listDevices", token, {});
 
-      if (!res.ok) {
-        throw new Error(`Yealink syncDevices failed: ${res.status} ${res.statusText}`);
-      }
-
-      const json = (await res.json()) as Record<string, unknown>;
-      const items = (json.devices ?? json.data ?? []) as Record<string, unknown>[];
-
-      return items.map((d): NormalizedDevice => ({
+      return devices.map((d): NormalizedDevice => ({
         platform: Platform.YEALINK_YMCS,
-        platformId: String(d.deviceId ?? d.id),
-        name: String(d.deviceName ?? d.name ?? d.deviceId ?? d.id),
-        model: d.model != null ? String(d.model) : undefined,
-        firmware: d.firmwareVersion != null ? String(d.firmwareVersion) : undefined,
-        ipAddress: d.ipAddress != null ? String(d.ipAddress) : undefined,
-        macAddress: d.macAddress != null ? String(d.macAddress) : undefined,
-        status: toDeviceStatus(String(d.status ?? "unknown")),
-        lastSeenAt: d.lastSeen != null ? new Date(String(d.lastSeen)) : undefined,
+        platformId: d.id,
+        name: d.name,
+        model: d.modelId || undefined,
+        firmware: d.programVersion || undefined,
+        macAddress: d.mac || undefined,
+        status: toDeviceStatus(d.deviceStatus),
         rawPayload: d,
       }));
     },
 
-    async fetchRecentAlerts(since: Date): Promise<NormalizedAlert[]> {
-      const eventTypesParam = Array.from(ALERT_EVENT_TYPES).join(",");
-      const res = await fetch(
-        `${API_BASE}/v1/events?startTime=${since.getTime()}&eventTypes=${eventTypesParam}&pageSize=200`,
-        { headers: { "X-Api-Key": apiKey } },
-      );
+    async fetchRecentAlerts(_since: Date): Promise<NormalizedAlert[]> {
+      const token = await ensureToken();
+      const allAlarms = await fetchAllPages<YmcsAlarm>(baseUrl, "/v2/dm/listAlarms", token, {});
+      const activeAlarms = allAlarms.filter((a) => a.status === 1);
 
-      if (!res.ok) {
-        throw new Error(`Yealink fetchRecentAlerts failed: ${res.status} ${res.statusText}`);
-      }
-
-      const json = (await res.json()) as Record<string, unknown>;
-      const items = (json.events ?? json.data ?? []) as Record<string, unknown>[];
-
-      const alerts: NormalizedAlert[] = [];
-      for (const e of items) {
-        const eventType = String(e.eventType ?? "");
-        const severity = yealinkEventToSeverity(eventType);
-        if (severity === null) continue;
-
-        const device = isRecord(e.device) ? e.device : {};
-        const deviceId = String(device.deviceId ?? device.id ?? "");
-        const deviceName = String(device.deviceName ?? device.name ?? deviceId);
-
-        alerts.push({
-          platform: Platform.YEALINK_YMCS,
-          platformAlertId: String(e.eventId ?? e.id ?? ""),
-          platformDeviceId: deviceId,
-          severity,
-          title: `${eventType}: ${deviceName}`,
-          rawPayload: e,
-          receivedAt: new Date(),
-        });
-      }
-
-      return alerts;
-    },
-
-    normalizeWebhookPayload(raw: unknown): NormalizedAlert | null {
-      if (!isRecord(raw)) return null;
-
-      const eventType = String(raw.eventType ?? "");
-      if (!ALERT_EVENT_TYPES.has(eventType)) return null;
-
-      const severity = yealinkEventToSeverity(eventType);
-      if (severity === null) return null;
-
-      const device = isRecord(raw.device) ? raw.device : {};
-      const deviceId = String(device.deviceId ?? device.id ?? "");
-      const deviceName = String(device.deviceName ?? device.name ?? deviceId ?? "Unknown device");
-
-      return {
+      return activeAlarms.map((a): NormalizedAlert => ({
         platform: Platform.YEALINK_YMCS,
-        platformAlertId: String(raw.eventId ?? ""),
-        platformDeviceId: deviceId,
-        severity,
-        title: `${eventType}: ${deviceName}`,
-        rawPayload: raw,
-        receivedAt: raw.occurredAt != null ? new Date(String(raw.occurredAt)) : new Date(),
-      };
+        platformAlertId: a.id,
+        platformDeviceId: a.mac,
+        severity: levelToSeverity(a.level),
+        title: `${a.event}: ${a.model || "Device"} (${a.mac})`,
+        description: a.siteName ? `Site: ${a.siteName}` : undefined,
+        rawPayload: a,
+        receivedAt: new Date(a.firstAlarmTime),
+      }));
     },
 
-    verifyWebhookSignature(payload: string, sig: string): boolean {
-      if (!webhookSecret) return false;
+    verifyWebhookSignature(_payload: string, sig: string): boolean {
+      if (!webhookSecret || !sig) return false;
+      return sig === webhookSecret;
+    },
 
-      const expected = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(payload)
-        .digest("hex");
-
-      if (sig.length !== expected.length) return false;
-
-      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+    normalizeWebhookPayload(_raw: unknown): NormalizedAlert | null {
+      return null;
     },
 
     async rebootDevice(platformId: string): Promise<void> {
-      const res = await fetch(`${API_BASE}/v1/devices/${platformId}/reboot`, {
-        method: "POST",
-        headers: { "X-Api-Key": apiKey },
-      });
+      const token = await ensureToken();
+      const result = await ymcsPost<YmcsRebootResponse>(
+        baseUrl,
+        "/v2/dm/device/reboot",
+        token,
+        { deviceIds: [platformId], deviceType: 1 }
+      );
 
-      if (!res.ok) {
-        throw new Error(`Yealink rebootDevice failed for ${platformId}: ${res.status} ${res.statusText}`);
+      if (result.failureCount > 0) {
+        const firstError = result.errors[0];
+        throw new Error(firstError?.msg ?? `YMCS reboot failed for device ${platformId}`);
       }
     },
   };

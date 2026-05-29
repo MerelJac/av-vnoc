@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Platform, AlertSeverity } from "@prisma/client";
 import { NormalizedAlert, NormalizedDevice, PlatformAdapter, DeviceStatus } from "./types";
 import { getCredential, updateConfig } from "./credentials";
@@ -146,6 +147,10 @@ export async function createYealinkAdapter(): Promise<PlatformAdapter> {
       return activeAlarms.map((a): NormalizedAlert => ({
         platform: Platform.YEALINK_YMCS,
         platformAlertId: a.id,
+        // YMCS alarms only carry the device MAC, not the YMCS device UUID that
+        // syncDevices stores as platformId. correlation.ts will not find a device
+        // match for these alerts (deviceId will be null on the resulting ticket).
+        // Phase 2 fix: add MAC-based device lookup in correlation.ts.
         platformDeviceId: a.mac,
         severity: levelToSeverity(a.level),
         title: `${a.event}: ${a.model || "Device"} (${a.mac})`,
@@ -157,7 +162,8 @@ export async function createYealinkAdapter(): Promise<PlatformAdapter> {
 
     verifyWebhookSignature(_payload: string, sig: string): boolean {
       if (!webhookSecret || !sig) return false;
-      return sig === webhookSecret;
+      if (sig.length !== webhookSecret.length) return false;
+      return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(webhookSecret));
     },
 
     normalizeWebhookPayload(_raw: unknown): NormalizedAlert | null {

@@ -240,4 +240,46 @@ describe("POST /api/webhooks/yealink", () => {
     expect(res.status).toBe(200);
     expect(mockProcessAlert).toHaveBeenCalledTimes(2);
   });
+
+  it("isolates per-event errors — one failing event does not abort the batch", async () => {
+    const multiBody = {
+      events: [
+        {
+          id: "evt-fail",
+          type: "alarm.created",
+          createTime: 1600063609555,
+          partyId: "enterprise-id",
+          data: { id: "alarm-fail", event: "Offline", mac: "aabbcc000000", model: "SIP-T54S" },
+        },
+        {
+          id: "evt-ok",
+          type: "alarm.created",
+          createTime: 1600063609600,
+          partyId: "enterprise-id",
+          data: { id: "alarm-ok", event: "Offline", mac: "ddeeff111111", model: "SIP-T54S" },
+        },
+      ],
+    };
+
+    // First processAlert call throws, second succeeds
+    mockProcessAlert
+      .mockRejectedValueOnce(new Error("DB connection lost"))
+      .mockResolvedValueOnce({ action: "created", alertId: "a2", ticketId: "t2" });
+
+    const req = makeRequest(multiBody);
+    const res = await POST(req);
+    const body = (await res.json()) as { ok: boolean; processed: number; results: Array<{ action: string }> };
+
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
+    // Both events were attempted
+    expect(body.results).toHaveLength(2);
+    // First event recorded as error, second as alert_created
+    expect(body.results[0].action).toBe("error");
+    expect(body.results[1].action).toBe("alert_created");
+    // webhookEvent.update was called with error for the first event
+    expect(mockUpdateEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ error: "DB connection lost" }) })
+    );
+  });
 });

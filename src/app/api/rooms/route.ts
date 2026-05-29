@@ -45,3 +45,19 @@ export async function GET(_req: NextRequest) {
 
   return NextResponse.json({ success: true, data });
 }
+
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json() as { siteId?: string; name?: string };
+  if (!body.name?.trim() || !body.siteId) {
+    return NextResponse.json({ error: "siteId and name are required" }, { status: 400 });
+  }
+
+  const room = await prisma.room.create({
+    data: { siteId: body.siteId, name: body.name.trim() },
+  });
+
+  return NextResponse.json({ success: true, data: room }, { status: 201 });
+}

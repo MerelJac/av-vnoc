@@ -8,7 +8,7 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  const [customers, totalCustomers, myQueueCount, profile] = await Promise.all([
+  const [customers, totalCustomers, myQueueCount, profile, configuredCreds] = await Promise.all([
     prisma.customer.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5 }),
     prisma.customer.count(),
     prisma.ticket.count({
@@ -18,7 +18,19 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
       where: { userId: session.user.id },
       select: { firstName: true, lastName: true },
     }),
+    prisma.platformCredential.findMany({
+      where: {
+        OR: [
+          { clientId: { not: null } },
+          { apiKey: { not: null } },
+          { webhookSecret: { not: null } },
+        ],
+      },
+      select: { platform: true },
+    }),
   ]);
+
+  const configuredPlatforms = configuredCreds.map((c) => c.platform as string);
 
   const firstName = profile?.firstName ?? "";
   const lastName = profile?.lastName ?? "";
@@ -34,6 +46,7 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
       myQueueCount={myQueueCount}
       userInitials={userInitials}
       userName={userName}
+      configuredPlatforms={configuredPlatforms}
     >
       {children}
     </SidebarLayout>

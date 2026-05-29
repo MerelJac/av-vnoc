@@ -4,14 +4,14 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "../Logout";
 import { X } from "lucide-react";
 
-const DATA_SOURCES = [
-  "Poly Lens",
-  "Yealink YMCS",
-  "Neat Pulse",
-  "Logitech Sync",
-  "Cisco Control Hub",
-  "ServiceNow",
-  "Utelogy",
+const DATA_SOURCES: { label: string; platform: string | null }[] = [
+  { label: "Poly Lens", platform: "POLY_LENS" },
+  { label: "Yealink YMCS", platform: "YEALINK_YMCS" },
+  { label: "Neat Pulse", platform: "NEAT_PULSE" },
+  { label: "Logitech Sync", platform: "LOGITECH_SYNC" },
+  { label: "Cisco Control Hub", platform: "CISCO_CONTROL_HUB" },
+  { label: "ServiceNow", platform: null },
+  { label: "Utelogy", platform: "UTELOGY" },
 ];
 
 interface Customer {
@@ -26,6 +26,7 @@ interface AppSidebarProps {
   totalCustomers: number;
   myQueueCount: number;
   isSuperAdmin?: boolean;
+  configuredPlatforms?: string[];
 }
 
 function SectionLabel({ label }: { label: string }) {
@@ -87,6 +88,7 @@ export function AppSidebar({
   totalCustomers,
   myQueueCount,
   isSuperAdmin,
+  configuredPlatforms,
 }: AppSidebarProps) {
   const extraCustomers = totalCustomers - customers.length;
 
@@ -104,7 +106,7 @@ export function AppSidebar({
         className={`
           fixed inset-y-0 left-0 z-50 top-[52px]
           w-[220px] bg-[#0a0e2e] border-r border-[#1e2a6e]
-          flex flex-col overflow-y-auto
+          flex flex-col
           transform transition-transform duration-200
           ${open ? "translate-x-0" : "-translate-x-full"}
           md:sticky md:top-[52px] md:translate-x-0 md:h-[calc(100vh-52px)]
@@ -119,7 +121,7 @@ export function AppSidebar({
         </button>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-3 space-y-0.5">
+        <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-0.5">
           <SectionLabel label="Live Operations" />
           <SidebarLink href="/tickets?queue=mine" label="My Queue" badge={myQueueCount} onClick={onClose} />
           <SidebarLink href="/alerts" label="All Alerts" onClick={onClose} />
@@ -151,12 +153,22 @@ export function AppSidebar({
           )}
 
           <SectionLabel label="Data Sources" />
-          {DATA_SOURCES.map((src) => (
-            <div key={src} className="flex items-center gap-2 px-2.5 py-[5px] text-[12px] text-[#8892b0]">
-              <span className="flex-1 truncate">{src}</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
-            </div>
-          ))}
+          {DATA_SOURCES.map(({ label, platform }) => {
+            const configured = Array.isArray(configuredPlatforms) ? configuredPlatforms : [];
+            const connected = platform !== null && configured.includes(platform);
+            return (
+              <div key={label} className="flex items-center gap-2 px-2.5 py-[5px] text-[12px]">
+                <span className={`flex-1 truncate ${connected ? "text-[#c8d0e0]" : "text-[#4a5568]"}`}>
+                  {label}
+                </span>
+                <span
+                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    connected ? "bg-green-400" : "bg-[#2d3a5e]"
+                  }`}
+                />
+              </div>
+            );
+          })}
 
           {isSuperAdmin && (
             <>
@@ -168,7 +180,7 @@ export function AppSidebar({
         </nav>
 
         {/* Bottom */}
-        <div className="px-3 pb-4 pt-2 border-t border-[#1e2a6e] space-y-0.5">
+        <div className="shrink-0 px-3 pb-4 pt-2 border-t border-[#1e2a6e] space-y-0.5">
           <SidebarLink href="/profile" label="Profile" onClick={onClose} />
           <LogoutButton />
         </div>

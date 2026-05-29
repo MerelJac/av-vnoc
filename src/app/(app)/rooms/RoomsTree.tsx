@@ -104,7 +104,7 @@ export function RoomsTree({ customers, selectedRoomId, onSelectRoom }: Props) {
                       {expandedSites.has(site.id) ? "▾" : "▸"}
                     </span>
                     📍 <span>{site.name}</span>
-                    {site.city && (
+                    {site.city && !site.name.includes(site.city) && (
                       <span className="text-muted-foreground/60 ml-1">— {site.city}</span>
                     )}
                   </button>

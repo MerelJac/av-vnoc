@@ -36,7 +36,7 @@ export function RoomsClient({ initialCustomers }: Props) {
   };
 
   return (
-    <div className="flex h-[calc(100vh-120px)] border border-border rounded-lg overflow-hidden">
+    <div className="flex flex-1 min-h-0 border border-border rounded-lg overflow-hidden">
       {/* Tree panel */}
       <div className="w-64 border-r border-border bg-card flex-shrink-0">
         <RoomsTree

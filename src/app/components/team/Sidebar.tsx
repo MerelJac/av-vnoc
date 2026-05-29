@@ -17,6 +17,7 @@ export default function SidebarLayout({
   myQueueCount,
   userInitials,
   userName,
+  configuredPlatforms,
 }: {
   children: React.ReactNode;
   isSuperAdmin?: boolean;
@@ -26,6 +27,7 @@ export default function SidebarLayout({
   myQueueCount: number;
   userInitials: string;
   userName: string;
+  configuredPlatforms?: string[];
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -44,8 +46,9 @@ export default function SidebarLayout({
           totalCustomers={totalCustomers}
           myQueueCount={myQueueCount}
           isSuperAdmin={isSuperAdmin}
+          configuredPlatforms={configuredPlatforms}
         />
-        <main className="flex-1 overflow-y-auto bg-[#f0f2f8] p-6 pt-6">
+        <main className="flex-1 min-h-0 flex flex-col overflow-y-auto bg-[#f0f2f8] p-6 pt-6">
           {children}
         </main>
       </div>

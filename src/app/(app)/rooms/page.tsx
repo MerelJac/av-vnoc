@@ -45,8 +45,8 @@ export default async function RoomsPage() {
   }));
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="flex items-center justify-between mb-4 shrink-0">
         <h1 className="text-2xl font-bold text-foreground">Rooms</h1>
       </div>
       <RoomsClient initialCustomers={initialCustomers} />

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { PlatformPill } from "@/app/components/ui/PlatformPill";
 import { Platform } from "@prisma/client";
+import { extractVendorRoomName } from "@/lib/device-utils";
 
 interface UnassignedDevice {
   id: string;
@@ -18,12 +19,6 @@ interface Props {
   roomName: string;
   onClose: () => void;
   onAssigned: () => void;
-}
-
-function extractVendorRoomName(rawPayload: unknown): string | null {
-  if (!rawPayload || typeof rawPayload !== "object") return null;
-  const room = (rawPayload as Record<string, unknown>)["room"] as { name?: string } | null;
-  return room?.name ?? null;
 }
 
 export function AssignDeviceModal({ roomId, roomName, onClose, onAssigned }: Props) {

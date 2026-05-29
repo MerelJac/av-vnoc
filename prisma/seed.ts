@@ -114,6 +114,66 @@ async function main() {
     update: { status: 'online', lastSeenAt: new Date() },
   })
 
+  const boardRoom = await prisma.room.upsert({
+    where: { id: 'seed-room-board' },
+    update: {},
+    create: {
+      id: 'seed-room-board',
+      siteId: vnocSite.id,
+      name: 'Board Room',
+    },
+  })
+
+  await prisma.device.upsert({
+    where: { platform_platformId: { platform: 'POLY_LENS', platformId: 'seed-poly-001' } },
+    update: {},
+    create: {
+      platformId: 'seed-poly-001',
+      platform: 'POLY_LENS',
+      name: 'Studio X30 (Conf A)',
+      model: 'Poly Studio X30',
+      status: 'online',
+      macAddress: 'aa:bb:cc:11:22:33',
+      lastSeenAt: new Date(),
+      roomId: vnocRoom.id,
+      rawPayload: { id: 'seed-poly-001', name: 'Studio X30', connected: true, hardwareModel: 'Poly Studio X30', room: { id: 'ext-room-1', name: 'Conference Room A' } },
+    },
+  })
+
+  await prisma.device.upsert({
+    where: { platform_platformId: { platform: 'YEALINK_YMCS', platformId: 'seed-ymcs-001' } },
+    update: {},
+    create: {
+      platformId: 'seed-ymcs-001',
+      platform: 'YEALINK_YMCS',
+      name: 'T57W-ConfA',
+      model: 'Yealink T57W',
+      status: 'online',
+      macAddress: 'dd:ee:ff:44:55:66',
+      lastSeenAt: new Date(),
+      roomId: vnocRoom.id,
+      rawPayload: { deviceSN: 'seed-ymcs-001', deviceName: 'T57W-ConfA', onlineStatus: 'online' },
+    },
+  })
+
+  // Unassigned device — vendor says it belongs in "Board Room" (triggers suggestion)
+  await prisma.device.upsert({
+    where: { platform_platformId: { platform: 'POLY_LENS', platformId: 'seed-poly-002' } },
+    update: {},
+    create: {
+      platformId: 'seed-poly-002',
+      platform: 'POLY_LENS',
+      name: 'EaglEye IV',
+      model: 'Poly EaglEye IV',
+      status: 'offline',
+      macAddress: '77:88:99:aa:bb:cc',
+      lastSeenAt: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      roomId: null,
+      rawPayload: { id: 'seed-poly-002', name: 'EaglEye IV', connected: false, hardwareModel: 'Poly EaglEye IV', room: { id: 'ext-room-2', name: 'Board Room' } },
+    },
+  })
+
+  console.log(`Seeded rooms: ${vnocRoom.name}, ${boardRoom.name}`)
   console.log('✅ VNOC seed data created')
 }
 

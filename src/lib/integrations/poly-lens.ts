@@ -137,7 +137,6 @@ async function fetchAllDevicePages(
   token: string,
   tenantId: string,
   query: string,
-  extraParams: Record<string, unknown> = {},
 ): Promise<PolyDevice[]> {
   const devices: PolyDevice[] = [];
   let nextToken: string | null = null;
@@ -149,12 +148,12 @@ async function fetchAllDevicePages(
       query,
       variables: {
         tenantId,
-        params: { pageSize: 500, nextToken, ...extraParams },
+        params: { pageSize: 500, nextToken },
       },
     });
 
-    const page = data.tenant.inventory.deviceSearch;
-    devices.push(...page.edges.map((e) => e.node));
+    const page: DevicesPage = data.tenant.inventory.deviceSearch;
+    devices.push(...page.edges.map((e: DeviceEdge) => e.node));
     nextToken = page.pageInfo.hasNextPage ? page.pageInfo.nextToken : null;
   } while (nextToken !== null);
 
@@ -233,17 +232,14 @@ export async function createPolyLensAdapter(): Promise<PlatformAdapter> {
       return devices.map(deviceToNormalized);
     },
 
-    // Poly Lens has no time-filtered alert endpoint. We filter for connected=false
-    // on each cron cycle. The `since` param is accepted for interface compatibility
-    // but unused — correlation.ts dedup prevents duplicate tickets.
+    // Poly Lens has no time-filtered alert endpoint. We fetch all devices and
+    // post-filter for connected=false in JS on each cron cycle. The `since`
+    // param is accepted for interface compatibility but unused — correlation.ts
+    // dedup prevents duplicate tickets.
     async fetchRecentAlerts(_since: Date): Promise<NormalizedAlert[]> {
       const token = await ensureToken();
-      const offline = await fetchAllDevicePages(
-        token,
-        tenantId,
-        OFFLINE_DEVICES_QUERY,
-        { filter: { field: "connected", contains: "false" } },
-      );
+      const allDevices = await fetchAllDevicePages(token, tenantId, OFFLINE_DEVICES_QUERY);
+      const offline = allDevices.filter((d) => !d.connected);
       return offline.map(offlineDeviceToAlert);
     },
 

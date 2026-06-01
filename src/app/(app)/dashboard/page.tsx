@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getRecentActivity } from "@/lib/activity";
 import { KpiStrip } from "./KpiStrip";
 import { AlertsFeed } from "./AlertsFeed";
 import { TicketsFeed } from "./TicketsFeed";
@@ -34,18 +35,18 @@ export default async function DashboardPage() {
     customers,
     rooms,
   ] = await Promise.all([
-    prisma.alert.count({ where: { status: "ACTIVE" } }),
+    prisma.alert.count({ where: { status: "ACTIVE", device: { roomId: { not: null } } } }),
     prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
     prisma.ticket.count({
       where: { status: { in: ["OPEN", "IN_PROGRESS"] }, slaDeadline: { lte: twoHoursFromNow } },
     }),
     prisma.alert.groupBy({
       by: ["severity"],
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", device: { roomId: { not: null } } },
       _count: { _all: true },
     }),
     prisma.alert.findMany({
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", device: { roomId: { not: null } } },
       orderBy: { receivedAt: "desc" },
       take: 10,
       include: {
@@ -68,7 +69,7 @@ export default async function DashboardPage() {
       take: 10,
       include: { customer: { select: { name: true } } },
     }),
-    prisma.activityLog.findMany({ orderBy: { createdAt: "desc" }, take: 20 }),
+    getRecentActivity(20),
     prisma.room.count({ where: { devices: { some: { status: "online" } } } }),
     prisma.room.count(),
     prisma.ticket.findMany({

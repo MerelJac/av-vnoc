@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50")));
 
   const where = {
+    // Only surface alerts from devices assigned to a room.
+    device: { roomId: { not: null } },
     ...(status ? { status } : {}),
     ...(severity ? { severity } : {}),
     ...(platform ? { platform } : {}),

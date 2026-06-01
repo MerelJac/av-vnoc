@@ -33,14 +33,14 @@ export async function GET(_req: NextRequest) {
     roomsTotal,
     recentlyResolvedTickets,
   ] = await Promise.all([
-    prisma.alert.count({ where: { status: "ACTIVE" } }),
+    prisma.alert.count({ where: { status: "ACTIVE", device: { roomId: { not: null } } } }),
     prisma.ticket.count({ where: { status: { in: ["OPEN", "IN_PROGRESS"] } } }),
     prisma.ticket.count({
       where: { status: { in: ["OPEN", "IN_PROGRESS"] }, slaDeadline: { lte: twoHoursFromNow } },
     }),
     prisma.alert.groupBy({
       by: ["severity"],
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", device: { roomId: { not: null } } },
       _count: { _all: true },
     }),
     prisma.room.count({ where: { devices: { some: { status: "online" } } } }),

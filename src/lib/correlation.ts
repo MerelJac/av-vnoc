@@ -169,8 +169,15 @@ export async function processAlert(
     include: { room: { include: { site: { include: { customer: true } } } } },
   });
 
+  // Suppress alerts from devices that aren't assigned to a room. Unknown devices
+  // (not in our inventory) and unassigned devices are noise we don't surface as
+  // alerts or tickets.
+  if (!device || !device.roomId) {
+    return { action: "suppressed" };
+  }
+
   // Pass 2: Alert persistence with flap suppression (autoCloseAt = receivedAt + 60 seconds)
-  const alert = await persistAlert(normalized, device?.id ?? null, device?.roomId ?? null);
+  const alert = await persistAlert(normalized, device.id, device.roomId);
 
   // Pass 3: Pattern grouping — call assignAlertGroup
   await assignAlertGroup(alert, device as DeviceWithRoom | null);

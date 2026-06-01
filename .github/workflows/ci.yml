@@ -14,8 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-      - run: npm ci
+      # This repo does not commit package-lock.json, so use `npm install`
+      # (npm ci / setup-node cache both require a lockfile).
+      - run: npm install --no-audit --no-fund
       - run: npx prisma generate
       - run: npm run lint
       - run: npx tsc --noEmit
@@ -50,8 +51,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-      - run: npm ci
+      # This repo does not commit package-lock.json, so use `npm install`
+      # (npm ci / setup-node cache both require a lockfile).
+      - run: npm install --no-audit --no-fund
       - run: npx prisma generate
       - run: npx prisma migrate deploy
       - run: npx prisma db seed

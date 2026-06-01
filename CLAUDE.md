@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Development (runs on port 3001 with Turbopack)
+# Development (runs on port 3000 with Turbopack)
 npm run dev
 
 # Build

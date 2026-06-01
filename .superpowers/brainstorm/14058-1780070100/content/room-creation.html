@@ -1,0 +1,90 @@
+<h2>How do rooms get into the system?</h2>
+<p class="subtitle">Poly Lens & YMCS devices already carry vendor-side room names. Do we use those as a starting point, or do users build the room list from scratch?</p>
+
+<div class="cards">
+
+  <!-- Option A: Manual only -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.5">
+        <div style="color:#58a6ff;font-size:10px;margin-bottom:6px">Tree panel → "+ New Room"</div>
+        <div style="background:#161b22;border:1px solid #388bfd;border-radius:6px;padding:10px">
+          <div style="color:#e6edf3;font-weight:bold;margin-bottom:6px;font-size:10px">Add Room to Acme HQ</div>
+          <div style="margin-bottom:4px">
+            <div style="color:#8b949e;font-size:9px;margin-bottom:2px">Room name</div>
+            <div style="background:#0d1117;border:1px solid #388bfd;border-radius:3px;padding:3px 6px;color:#e6edf3;font-size:10px">Conference Room A</div>
+          </div>
+          <div style="margin-bottom:6px">
+            <div style="color:#8b949e;font-size:9px;margin-bottom:2px">Floor / location (optional)</div>
+            <div style="background:#0d1117;border:1px solid #30363d;border-radius:3px;padding:3px 6px;color:#8b949e;font-size:10px">e.g. Floor 2, East Wing</div>
+          </div>
+          <div style="display:flex;gap:4px">
+            <span style="background:#238636;color:#fff;padding:2px 12px;border-radius:3px;font-size:9px">Create</span>
+            <span style="background:#21262d;color:#8b949e;padding:2px 10px;border-radius:3px;font-size:9px">Cancel</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · Manual Entry Only</h3>
+      <p>Users create rooms one by one via a simple form. Clean and explicit — the app's room list is fully user-controlled. No confusion from vendor naming mismatches.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Import from vendor -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.5">
+        <div style="color:#58a6ff;font-size:10px;margin-bottom:6px">"Import rooms from Poly Lens" wizard</div>
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;padding:6px">
+          <div style="color:#e6edf3;font-size:10px;font-weight:bold;margin-bottom:4px">Rooms found in Poly Lens</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <input type="checkbox" checked style="accent-color:#388bfd">
+            <span style="font-size:10px">Conference Room A <span style="color:#8b949e">(2 devices)</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <input type="checkbox" checked style="accent-color:#388bfd">
+            <span style="font-size:10px">Board Room <span style="color:#8b949e">(4 devices)</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+            <input type="checkbox" style="accent-color:#388bfd">
+            <span style="font-size:10px;color:#8b949e">Lobby (no devices)</span>
+          </div>
+          <div style="background:#238636;color:#fff;padding:2px 10px;border-radius:3px;font-size:9px;display:inline-block">Import selected (2)</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · Import from Vendor</h3>
+      <p>A one-time wizard reads room names from Poly Lens (and YMCS) and creates app rooms in bulk. Devices get auto-assigned in the same step. Fast for initial setup — but vendor room names may not match what the customer calls them.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Auto-suggest + manual -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.5">
+        <div style="color:#58a6ff;font-size:10px;margin-bottom:6px">Unassigned device badge → smart suggestion</div>
+        <div style="background:#161b22;border:1px solid #f0883e;border-radius:4px;padding:6px;margin-bottom:5px">
+          <div style="color:#f0883e;font-size:9px;font-weight:bold;margin-bottom:2px">⚠ Studio X30 — unassigned</div>
+          <div style="color:#8b949e;font-size:9px;margin-bottom:4px">Poly Lens says this device is in <strong style="color:#e6edf3">"Conf A"</strong></div>
+          <div style="display:flex;gap:4px">
+            <span style="background:#1f6feb22;color:#58a6ff;border:1px solid #1f6feb;padding:1px 8px;border-radius:3px;font-size:9px">Create room "Conf A" &amp; assign</span>
+            <span style="background:#21262d;color:#8b949e;padding:1px 6px;border-radius:3px;font-size:9px">Pick different room</span>
+          </div>
+        </div>
+        <div style="color:#8b949e;font-size:9px">Users can also create rooms manually at any time</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · Smart Suggestions + Manual (Recommended)</h3>
+      <p>When a device is unassigned, the app shows the vendor-side room name as a one-click suggestion ("Poly says this device is in 'Conf A' — create that room?"). Users can accept, rename, or pick an existing room. Manual creation always available too.</p>
+      <div style="margin-top:8px">
+        <span style="background:#238636;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">Fast setup without forcing vendor naming on the customer</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Click to select, or tell me in the terminal.</p>

@@ -35,7 +35,6 @@ export default async function TicketsPage() {
       <h1 className="text-2xl font-bold text-foreground mb-6">Ticket Queue</h1>
       <TicketQueue
         initial={serialized as Parameters<typeof TicketQueue>[0]["initial"]}
-        userId={session.user.id}
       />
     </div>
   );

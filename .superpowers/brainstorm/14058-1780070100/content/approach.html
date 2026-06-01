@@ -1,0 +1,107 @@
+<h2>Rooms & Devices: Which overall approach?</h2>
+<p class="subtitle">This shapes everything else — pick the mental model that matches how your ops team thinks about the fleet.</p>
+
+<div class="cards">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.6">
+        <div style="color:#58a6ff;margin-bottom:6px">📋 ROOMS  &nbsp; 📱 DEVICES</div>
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;padding:6px;margin-bottom:4px">
+          <div style="color:#e6edf3;font-weight:bold">Conference A · Floor 2</div>
+          <div style="color:#8b949e;font-size:10px">3 devices · 2 online · 1 offline</div>
+          <div style="margin-top:4px;display:flex;gap:4px">
+            <span style="background:#388bfd22;color:#58a6ff;padding:1px 6px;border-radius:10px;font-size:10px">Poly Studio X30</span>
+            <span style="background:#da363322;color:#f85149;padding:1px 6px;border-radius:10px;font-size:10px">⚠ Yealink T57W</span>
+          </div>
+        </div>
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;padding:6px">
+          <div style="color:#e6edf3;font-weight:bold">Board Room · Floor 3</div>
+          <div style="color:#8b949e;font-size:10px">5 devices · all online</div>
+        </div>
+        <div style="margin-top:6px;color:#8b949e;font-size:10px">Devices page → separate flat inventory list</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A &nbsp;· &nbsp;Room-Centric</h3>
+      <p>Rooms page is the hub. Each room card shows its devices inline. The Devices page is a flat inventory for searching across the whole fleet. Room assignment lives in the Rooms page.</p>
+      <div style="margin-top:8px">
+        <span style="background:#238636;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">Best for: ops teams who think "which room has a problem"</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.6">
+        <div style="color:#58a6ff;margin-bottom:6px">📱 DEVICES</div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;padding:4px 8px;color:#8b949e;font-size:10px">Customer ▼</div>
+          <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;padding:4px 8px;color:#8b949e;font-size:10px">Platform ▼</div>
+          <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;padding:4px 8px;color:#8b949e;font-size:10px">Room ▼</div>
+          <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;padding:4px 8px;color:#8b949e;font-size:10px">Status ▼</div>
+        </div>
+        <div style="background:#161b22;border:1px solid #30363d;border-radius:4px;overflow:hidden">
+          <div style="padding:4px 8px;background:#21262d;color:#8b949e;font-size:10px;display:flex;gap:16px">
+            <span>DEVICE</span><span>PLATFORM</span><span>ROOM</span><span>STATUS</span>
+          </div>
+          <div style="padding:4px 8px;display:flex;gap:16px;color:#e6edf3;font-size:10px;border-top:1px solid #21262d">
+            <span>Studio X30</span><span>Poly</span>
+            <span style="color:#f0883e">⚠ unassigned</span>
+            <span style="color:#3fb950">●</span>
+          </div>
+          <div style="padding:4px 8px;display:flex;gap:16px;color:#e6edf3;font-size:10px;border-top:1px solid #21262d">
+            <span>T57W-001</span><span>YMCS</span>
+            <span style="color:#8b949e">Conf A</span>
+            <span style="color:#f85149">●</span>
+          </div>
+        </div>
+        <div style="margin-top:6px;color:#8b949e;font-size:10px">Click row → assign to room in a modal</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B &nbsp;· &nbsp;Device Inventory First</h3>
+      <p>Devices page is the primary view — filterable, sortable table of all devices. Rooms are a filter/column. "Unassigned" devices are clearly flagged. Assignment is done per-device via inline edit or bulk action.</p>
+      <div style="margin-top:8px">
+        <span style="background:#1f6feb;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">Best for: teams who onboard devices first, rooms second</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;padding:8px;background:#0d1117;color:#c9d1d9;border-radius:4px;line-height:1.6">
+        <div style="color:#58a6ff;margin-bottom:6px">🏢 ROOMS &nbsp; 📱 DEVICES</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#161b22;border:1px solid #30363d;border-radius:4px;padding:6px">
+            <div style="color:#e6edf3;font-size:10px;font-weight:bold;margin-bottom:4px">Rooms</div>
+            <div style="color:#8b949e;font-size:9px;padding:3px 4px;background:#21262d;border-radius:2px;margin-bottom:2px">Acme Corp</div>
+            <div style="color:#e6edf3;font-size:9px;padding:3px 4px;padding-left:12px;margin-bottom:2px">📍 HQ</div>
+            <div style="color:#58a6ff;font-size:9px;padding:2px 4px;padding-left:20px;margin-bottom:2px">■ Conf A</div>
+            <div style="color:#e6edf3;font-size:9px;padding:2px 4px;padding-left:20px;margin-bottom:2px">□ Board Rm</div>
+          </div>
+          <div style="flex:2;background:#161b22;border:1px solid #30363d;border-radius:4px;padding:6px">
+            <div style="color:#58a6ff;font-size:10px;font-weight:bold;margin-bottom:4px">Conf A — devices</div>
+            <div style="color:#3fb950;font-size:9px;margin-bottom:2px">● Studio X30 · online</div>
+            <div style="color:#f85149;font-size:9px;margin-bottom:2px">● T57W · offline</div>
+            <div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;color:#8b949e;font-size:9px">+ Assign device to this room</div>
+          </div>
+        </div>
+        <div style="margin-top:6px;color:#8b949e;font-size:10px">Devices page = separate unassigned queue + full inventory</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C &nbsp;· &nbsp;Split — Tree Nav + Detail</h3>
+      <p>Left-panel tree (Customer → Site → Room). Right panel shows devices for the selected room. Devices page handles the "unassigned" queue separately. Assignment is done by dragging or clicking "assign" from either side.</p>
+      <div style="margin-top:8px">
+        <span style="background:#6e40c9;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px">Best for: large fleets, many customers/sites/rooms</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Click a card to select. Or tell me in the terminal if you want a mix.</p>

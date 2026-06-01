@@ -30,8 +30,6 @@ export default async function DashboardPage() {
     roomsOnline,
     roomsTotal,
     recentlyResolvedTickets,
-    closedTickets30d,
-    closedOnTime30d,
     customers,
     rooms,
   ] = await Promise.all([
@@ -75,17 +73,6 @@ export default async function DashboardPage() {
     prisma.ticket.findMany({
       where: { resolvedAt: { gte: yesterday }, status: { in: ["RESOLVED", "CLOSED"] } },
       select: { openedAt: true, resolvedAt: true },
-    }),
-    prisma.ticket.count({
-      where: { resolvedAt: { gte: thirtyDaysAgo }, status: { in: ["RESOLVED", "CLOSED"] } },
-    }),
-    prisma.ticket.count({
-      where: {
-        resolvedAt: { gte: thirtyDaysAgo },
-        status: { in: ["RESOLVED", "CLOSED"] },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        AND: [{ resolvedAt: { not: null } }] as any,
-      },
     }),
     prisma.customer.findMany({
       select: {

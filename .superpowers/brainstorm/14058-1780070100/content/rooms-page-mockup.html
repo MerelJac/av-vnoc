@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rooms Page Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; }
+
+  .page-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid #21262d;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .page-header h1 { font-size: 18px; font-weight: 600; }
+  .page-header .actions { display: flex; gap: 8px; }
+  .btn { padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; border: none; }
+  .btn-primary { background: #238636; color: #fff; }
+  .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .btn-ghost { background: transparent; color: #58a6ff; font-size: 12px; cursor: pointer; border: none; padding: 2px 6px; }
+
+  .layout { display: flex; height: calc(100vh - 53px); }
+
+  /* Left tree panel */
+  .tree-panel {
+    width: 260px;
+    min-width: 260px;
+    border-right: 1px solid #21262d;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .tree-search {
+    margin: 0 10px 8px;
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 5px 10px;
+    color: #8b949e;
+    font-size: 12px;
+    width: calc(100% - 20px);
+  }
+  .tree-customer {
+    padding: 4px 10px;
+    margin-bottom: 2px;
+  }
+  .tree-customer-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #c9d1d9;
+    font-weight: 600;
+    font-size: 12px;
+  }
+  .tree-customer-header:hover { background: #161b22; }
+  .tree-site {
+    margin-left: 12px;
+    margin-top: 2px;
+  }
+  .tree-site-header {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #8b949e;
+    font-size: 12px;
+  }
+  .tree-site-header:hover { background: #161b22; }
+  .tree-rooms {
+    margin-left: 12px;
+    margin-top: 2px;
+  }
+  .tree-room {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #c9d1d9;
+  }
+  .tree-room:hover { background: #161b22; }
+  .tree-room.active { background: #1f6feb22; color: #58a6ff; border-left: 2px solid #1f6feb; }
+  .tree-room .room-name { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .dot-ok { background: #3fb950; }
+  .dot-warn { background: #f0883e; }
+  .dot-err { background: #f85149; }
+  .tree-add-btn {
+    margin: 4px 10px 0 22px;
+    padding: 3px 8px;
+    background: transparent;
+    color: #58a6ff;
+    border: 1px dashed #388bfd44;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    width: calc(100% - 32px);
+    text-align: left;
+  }
+  .tree-add-btn:hover { background: #1f6feb11; }
+
+  /* Right detail panel */
+  .detail-panel { flex: 1; overflow-y: auto; padding: 20px 24px; }
+  .detail-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .detail-title { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .detail-meta { color: #8b949e; font-size: 12px; display: flex; gap: 12px; }
+  .detail-meta span { display: flex; align-items: center; gap: 4px; }
+  .detail-actions { display: flex; gap: 8px; align-items: center; }
+
+  .stat-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    flex: 1;
+  }
+  .stat-card .stat-value { font-size: 24px; font-weight: 700; }
+  .stat-card .stat-label { color: #8b949e; font-size: 11px; margin-top: 2px; }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .device-table { width: 100%; border-collapse: collapse; }
+  .device-table th {
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-bottom: 1px solid #21262d;
+  }
+  .device-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #161b22;
+    font-size: 12px;
+    vertical-align: middle;
+  }
+  .device-table tr:hover td { background: #161b22; }
+  .platform-pill {
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .pill-poly { background: #f0883e22; color: #f0883e; }
+  .pill-ymcs { background: #1f6feb22; color: #58a6ff; }
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+  }
+  .status-badge.online { color: #3fb950; }
+  .status-badge.offline { color: #f85149; }
+
+  /* Unassigned alert banner */
+  .unassigned-banner {
+    background: #f0883e11;
+    border: 1px solid #f0883e44;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .unassigned-banner .ub-text { font-size: 12px; color: #e6edf3; }
+  .unassigned-banner .ub-sub { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .ub-action { background: #f0883e; color: #fff; padding: 5px 12px; border-radius: 5px; font-size: 11px; cursor: pointer; border: none; white-space: nowrap; }
+
+  /* Add device modal inline preview */
+  .modal-overlay {
+    position: fixed; inset: 0; background: #0d111788; display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    padding: 20px;
+    width: 440px;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  .modal-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .modal-sub { color: #8b949e; font-size: 12px; margin-bottom: 14px; }
+  .modal-search {
+    background: #0d1117;
+    border: 1px solid #388bfd;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #e6edf3;
+    font-size: 12px;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  .device-pick-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 8px;
+    border-radius: 5px;
+    margin-bottom: 3px;
+    cursor: pointer;
+  }
+  .device-pick-row:hover { background: #21262d; }
+  .device-pick-row .dpname { font-size: 12px; }
+  .device-pick-row .dpmeta { font-size: 11px; color: #8b949e; }
+  .btn-add-sm { background: #238636; color: #fff; padding: 2px 10px; border-radius: 4px; font-size: 11px; border: none; cursor: pointer; }
+
+  .annotation {
+    background: #f0883e22;
+    border: 1px solid #f0883e55;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    color: #f0883e;
+    margin-top: 6px;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Rooms</h1>
+  <div class="actions">
+    <button class="btn btn-secondary">Import from Poly / YMCS</button>
+    <button class="btn btn-primary">+ New Room</button>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- Tree panel -->
+  <div class="tree-panel">
+    <input class="tree-search" placeholder="🔍 Search rooms…" value="">
+
+    <!-- Customer 1 -->
+    <div class="tree-customer">
+      <div class="tree-customer-header">▾ &nbsp;🏢 Acme Corp</div>
+      <div class="tree-site">
+        <div class="tree-site-header">▾ &nbsp;📍 HQ — Chicago</div>
+        <div class="tree-rooms">
+          <div class="tree-room active">
+            <div class="room-name"><span class="dot dot-warn"></span> Conference A</div>
+            <span style="font-size:10px;color:#8b949e">3</span>
+          </div>
+          <div class="tree-room">
+            <div class="room-name"><span class="dot dot-ok"></span> Board Room</div>
+            <span style="font-size:10px;color:#8b949e">5</span>
+          </div>
+          <div class="tree-room">
+            <div class="room-name"><span class="dot dot-ok"></span> Training Room</div>
+            <span style="font-size:10px;color:#8b949e">2</span>
+          </div>
+        </div>
+        <button class="tree-add-btn">+ Add room to HQ</button>
+      </div>
+      <div class="tree-site" style="margin-top:4px">
+        <div class="tree-site-header">▸ &nbsp;📍 Branch — Denver</div>
+      </div>
+    </div>
+
+    <!-- Customer 2 -->
+    <div class="tree-customer" style="margin-top:4px">
+      <div class="tree-customer-header">▸ &nbsp;🏢 TechStart Inc</div>
+    </div>
+  </div>
+
+  <!-- Detail panel -->
+  <div class="detail-panel">
+
+    <!-- Unassigned suggestion banner -->
+    <div class="unassigned-banner">
+      <div>
+        <div class="ub-text">⚠ &nbsp;<strong>1 device</strong> is unassigned in this room's platform data</div>
+        <div class="ub-sub">Poly Lens reports a "Yealink T57W" in "Conference A" — assign it here?</div>
+      </div>
+      <button class="ub-action">Review &amp; Assign →</button>
+    </div>
+
+    <div class="detail-header">
+      <div>
+        <div class="detail-title">Conference A</div>
+        <div class="detail-meta">
+          <span>📍 HQ — Chicago &nbsp;·&nbsp; Floor 2</span>
+          <span style="color:#8b949e">|</span>
+          <span>3 devices</span>
+        </div>
+      </div>
+      <div class="detail-actions">
+        <button class="btn btn-secondary">Edit Room</button>
+        <button class="btn btn-primary">+ Assign Device</button>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-value" style="color:#3fb950">2</div>
+        <div class="stat-label">Online</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#f85149">1</div>
+        <div class="stat-label">Offline</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#f0883e">1</div>
+        <div class="stat-label">Active Alerts</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">0</div>
+        <div class="stat-label">Open Tickets</div>
+      </div>
+    </div>
+
+    <!-- Devices in room -->
+    <div class="section-title">
+      <span>Devices in this room</span>
+    </div>
+    <table class="device-table">
+      <thead>
+        <tr>
+          <th>Device</th>
+          <th>Platform</th>
+          <th>Model</th>
+          <th>Status</th>
+          <th>Last Seen</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Studio X30</strong><br><span style="color:#8b949e;font-size:11px">aa:bb:cc:11:22:33</span></td>
+          <td><span class="platform-pill pill-poly">Poly Lens</span></td>
+          <td style="color:#8b949e">Poly Studio X30</td>
+          <td><div class="status-badge online"><span class="dot dot-ok"></span> Online</div></td>
+          <td style="color:#8b949e">2 min ago</td>
+          <td><button class="btn-ghost">Unassign</button></td>
+        </tr>
+        <tr>
+          <td><strong>T57W-ConfA</strong><br><span style="color:#8b949e;font-size:11px">dd:ee:ff:44:55:66</span></td>
+          <td><span class="platform-pill pill-ymcs">YMCS</span></td>
+          <td style="color:#8b949e">Yealink T57W</td>
+          <td><div class="status-badge online"><span class="dot dot-ok"></span> Online</div></td>
+          <td style="color:#8b949e">5 min ago</td>
+          <td><button class="btn-ghost">Unassign</button></td>
+        </tr>
+        <tr>
+          <td><strong>EaglEye IV</strong><br><span style="color:#8b949e;font-size:11px">77:88:99:aa:bb:cc</span></td>
+          <td><span class="platform-pill pill-poly">Poly Lens</span></td>
+          <td style="color:#8b949e">Poly EaglEye IV</td>
+          <td><div class="status-badge offline"><span class="dot dot-err"></span> Offline</div></td>
+          <td style="color:#8b949e">3 hrs ago</td>
+          <td><button class="btn-ghost">Unassign</button></td>
+        </tr>
+      </tbody>
+    </table>
+
+  </div>
+
+  <!-- Modal overlay (shown as context) -->
+  <div class="modal-overlay" style="position:absolute">
+    <div class="modal">
+      <div class="modal-title">Assign Device to Conference A</div>
+      <div class="modal-sub">Showing unassigned devices from Poly Lens &amp; YMCS</div>
+      <input class="modal-search" placeholder="🔍  Search by name, MAC, model…" value="">
+      <div class="device-pick-row">
+        <div>
+          <div class="dpname">Poly Studio E70 &nbsp;<span class="platform-pill pill-poly" style="font-size:9px">Poly Lens</span></div>
+          <div class="dpmeta">Model: Studio E70 &nbsp;·&nbsp; MAC: 11:22:33:44:55:66</div>
+          <div class="dpmeta" style="color:#f0883e">Poly says: "Conference A" — <strong style="color:#e6edf3">match?</strong></div>
+        </div>
+        <button class="btn-add-sm">Add</button>
+      </div>
+      <div class="device-pick-row">
+        <div>
+          <div class="dpname">T57W-Lobby &nbsp;<span class="platform-pill pill-ymcs" style="font-size:9px">YMCS</span></div>
+          <div class="dpmeta">Model: Yealink T57W &nbsp;·&nbsp; MAC: aa:bb:cc:dd:ee:ff</div>
+          <div class="dpmeta" style="color:#8b949e">No room in vendor data</div>
+        </div>
+        <button class="btn-add-sm">Add</button>
+      </div>
+      <div style="margin-top:10px;display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-secondary" style="font-size:12px">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="position:fixed;bottom:12px;right:16px;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:8px 14px;font-size:11px;color:#8b949e">
+  Mockup: Rooms Page — tree selected "Conference A" · assign modal open &nbsp;|&nbsp;
+  <a href="http://localhost:50498" style="color:#58a6ff">← back to choices</a>
+</div>
+
+</body>
+</html>

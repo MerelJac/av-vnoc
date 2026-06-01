@@ -32,10 +32,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function TicketQueue({
   initial,
-  userId,
 }: {
   initial: Ticket[];
-  userId: string;
 }) {
   const [tickets, setTickets] = useState(initial);
   const [tab, setTab] = useState<"mine" | "all">("mine");

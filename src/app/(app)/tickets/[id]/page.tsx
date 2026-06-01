@@ -69,7 +69,6 @@ export default async function TicketPage({
   return (
     <TicketDetail
       ticket={serialized as Parameters<typeof TicketDetail>[0]["ticket"]}
-      userId={session.user.id}
       vnocRole={session.user.vnocRole}
       isSuperAdmin={session.user.isSuperAdmin}
     />

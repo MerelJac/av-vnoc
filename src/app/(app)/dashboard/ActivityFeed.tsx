@@ -51,7 +51,7 @@ export function ActivityFeed({ initial }: { initial: LogEntry[] }) {
       {logs.length === 0 ? (
         <p className="px-4 py-6 text-[13px] text-gray-400">No recent activity.</p>
       ) : (
-        <ul>
+        <ul className="max-h-[360px] overflow-y-auto">
           {logs.map((log) => {
             const { label, cls } = getSourcePill(log.type, log.platform);
             return (

@@ -32,13 +32,13 @@ export default function SidebarLayout({
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-screen overflow-hidden">
       <TopNav
         userInitials={userInitials}
         userName={userName}
         onMenuClick={() => setSidebarOpen(true)}
       />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0">
         <AppSidebar
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}

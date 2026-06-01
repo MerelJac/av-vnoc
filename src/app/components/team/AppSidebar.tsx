@@ -105,11 +105,11 @@ export function AppSidebar({
       <aside
         className={`
           fixed inset-y-0 left-0 z-50 top-[52px]
-          w-[220px] bg-[#0a0e2e] border-r border-[#1e2a6e]
+          w-[220px] shrink-0 bg-[#0a0e2e] border-r border-[#1e2a6e]
           flex flex-col
           transform transition-transform duration-200
           ${open ? "translate-x-0" : "-translate-x-full"}
-          md:sticky md:top-[52px] md:translate-x-0 md:h-[calc(100vh-52px)]
+          md:static md:h-full md:translate-x-0
         `}
       >
         {/* Close button (mobile) */}

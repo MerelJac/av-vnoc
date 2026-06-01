@@ -24,7 +24,7 @@ export function TopNav({ userInitials, userName, onMenuClick }: TopNavProps) {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 flex items-center h-[52px] bg-[#0f1347] border-b border-[#1e2a6e]/60 px-5">
+    <header className="shrink-0 z-40 flex items-center h-[52px] bg-[#0f1347] border-b border-[#1e2a6e]/60 px-5">
       {/* Brand */}
       <div className="flex flex-col min-w-[210px]">
         <span className="text-[15px] font-extrabold tracking-wide text-white font-orbitron leading-none">

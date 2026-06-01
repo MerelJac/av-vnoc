@@ -108,13 +108,15 @@ export function SettingsClient() {
 
   return (
     <div className="max-w-2xl mx-auto py-10 px-4 space-y-8">
-      <h1 className="text-2xl font-semibold text-white">Platform Credentials</h1>
-      <p className="text-sm text-gray-400">
-        Credentials are stored in the database. Secret fields are masked after saving.
-      </p>
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900">Platform Credentials</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Credentials are stored in the database. Secret fields are masked after saving.
+        </p>
+      </div>
 
       {error && (
-        <div className="rounded bg-red-900/40 border border-red-700 px-4 py-3 text-sm text-red-300">
+        <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -122,47 +124,47 @@ export function SettingsClient() {
       {PLATFORMS.map((platform) => (
         <div
           key={platform.id}
-          className="rounded-lg border border-white/10 bg-white/5 p-6 space-y-4"
+          className="rounded-xl border border-gray-200 bg-white shadow-sm p-6 space-y-4"
         >
-          <h2 className="text-lg font-medium text-white">{platform.label}</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{platform.label}</h2>
 
           {platform.credFields.map((field) => (
             <div key={field.key}>
-              <label className="block text-sm text-gray-400 mb-1">{field.label}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
               <input
                 type={field.type}
                 placeholder={field.type === "password" ? "••••••••" : ""}
                 value={values[platform.id]?.creds[field.key] ?? ""}
                 onChange={(e) => onCredChange(platform.id, field.key, e.target.value)}
-                className="w-full rounded bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full rounded-md bg-white border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           ))}
 
           {platform.configFields.length > 0 && (
-            <>
-              <div className="border-t border-white/10 pt-3">
-                <p className="text-xs text-gray-500 mb-3">Configuration</p>
-                {platform.configFields.map((field) => (
-                  <div key={field.key} className="mb-3">
-                    <label className="block text-sm text-gray-400 mb-1">{field.label}</label>
-                    <input
-                      type={field.type}
-                      placeholder=""
-                      value={values[platform.id]?.config[field.key] ?? ""}
-                      onChange={(e) => onConfigChange(platform.id, field.key, e.target.value)}
-                      className="w-full rounded bg-white/5 border border-white/10 px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                ))}
-              </div>
-            </>
+            <div className="border-t border-gray-200 pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">
+                Configuration
+              </p>
+              {platform.configFields.map((field) => (
+                <div key={field.key} className="mb-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+                  <input
+                    type={field.type}
+                    placeholder=""
+                    value={values[platform.id]?.config[field.key] ?? ""}
+                    onChange={(e) => onConfigChange(platform.id, field.key, e.target.value)}
+                    className="w-full rounded-md bg-white border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              ))}
+            </div>
           )}
 
           <button
             onClick={() => onSave(platform.id)}
             disabled={saving === platform.id}
-            className="rounded bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white transition-colors"
+            className="rounded-md bg-blue-600 hover:bg-blue-700 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white transition-colors"
           >
             {saving === platform.id ? "Saving…" : saved === platform.id ? "Saved ✓" : "Save"}
           </button>

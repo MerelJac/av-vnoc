@@ -2,7 +2,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "../Logout";
-import { X } from "lucide-react";
 
 const DATA_SOURCES: { label: string; platform: string | null }[] = [
   { label: "Poly Lens", platform: "POLY_LENS" },
@@ -20,8 +19,6 @@ interface Customer {
 }
 
 interface AppSidebarProps {
-  open: boolean;
-  onClose: () => void;
   customers: Customer[];
   totalCustomers: number;
   myQueueCount: number;
@@ -82,8 +79,6 @@ function SidebarLink({
 }
 
 export function AppSidebar({
-  open,
-  onClose,
   customers,
   totalCustomers,
   myQueueCount,
@@ -93,49 +88,22 @@ export function AppSidebar({
   const extraCustomers = totalCustomers - customers.length;
 
   return (
-    <>
-      {/* Mobile overlay */}
-      {open && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 sm:hidden"
-          onClick={onClose}
-        />
-      )}
-
-      <aside
-        className={`
-          fixed inset-y-0 left-0 z-50 top-[52px]
-          w-[220px] shrink-0 bg-[#0a0e2e] border-r border-[#1e2a6e]
-          flex flex-col
-          transform transition-transform duration-200
-          ${open ? "translate-x-0" : "-translate-x-full"}
-          sm:static sm:h-full sm:translate-x-0
-        `}
-      >
-        {/* Close button (mobile) */}
-        <button
-          onClick={onClose}
-          className="sm:hidden absolute top-3 right-3 w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-[#8892b0] hover:text-white"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-
+    <aside className="h-full w-[220px] shrink-0 bg-[#0a0e2e] border-r border-[#1e2a6e] flex flex-col">
         {/* Nav */}
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-0.5">
           <SectionLabel label="Live Operations" />
-          <SidebarLink href="/tickets?queue=mine" label="My Queue" badge={myQueueCount} onClick={onClose} />
-          <SidebarLink href="/alerts" label="All Alerts" onClick={onClose} />
-          <SidebarLink href="/tickets" label="All Tickets" onClick={onClose} />
+          <SidebarLink href="/tickets?queue=mine" label="My Queue" badge={myQueueCount} />
+          <SidebarLink href="/alerts" label="All Alerts" />
+          <SidebarLink href="/tickets" label="All Tickets" />
           <SidebarLink href="/sites" label="Sites" disabled />
-          <SidebarLink href="/rooms" label="Rooms" onClick={onClose} />
-          <SidebarLink href="/devices" label="Devices" onClick={onClose} />
+          <SidebarLink href="/rooms" label="Rooms" />
+          <SidebarLink href="/devices" label="Devices" />
 
           <SectionLabel label="Customers" />
           {customers.map((c) => (
             <Link
               key={c.id}
               href={`/customers`}
-              onClick={onClose}
               className="flex items-center gap-2 px-2.5 py-[5px] rounded-md text-[12px] text-[#c8d0e0] hover:text-white hover:bg-white/5 transition-colors truncate"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[#4a5568] flex-shrink-0" />
@@ -145,7 +113,6 @@ export function AppSidebar({
           {extraCustomers > 0 && (
             <Link
               href="/customers"
-              onClick={onClose}
               className="px-2.5 py-[5px] text-[11px] text-[#90d5ff] hover:text-white transition-colors block"
             >
               +{extraCustomers} more →
@@ -173,18 +140,17 @@ export function AppSidebar({
           {isSuperAdmin && (
             <>
               <SectionLabel label="Admin" />
-              <SidebarLink href="/users" label="Users" onClick={onClose} />
-              <SidebarLink href="/settings" label="Platform Settings" onClick={onClose} />
+              <SidebarLink href="/users" label="Users" />
+              <SidebarLink href="/settings" label="Platform Settings" />
             </>
           )}
         </nav>
 
         {/* Bottom */}
         <div className="shrink-0 px-3 pb-4 pt-2 border-t border-[#1e2a6e] space-y-0.5">
-          <SidebarLink href="/profile" label="Profile" onClick={onClose} />
+          <SidebarLink href="/profile" label="Profile" />
           <LogoutButton />
         </div>
-      </aside>
-    </>
+    </aside>
   );
 }

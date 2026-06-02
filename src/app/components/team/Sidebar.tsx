@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import { TopNav } from "./TopNav";
 import { AppSidebar } from "./AppSidebar";
 import { VnocRole } from "@prisma/client";
@@ -29,19 +28,11 @@ export default function SidebarLayout({
   userName: string;
   configuredPlatforms?: string[];
 }) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
   return (
     <div className="flex flex-col h-screen overflow-hidden">
-      <TopNav
-        userInitials={userInitials}
-        userName={userName}
-        onMenuClick={() => setSidebarOpen(true)}
-      />
+      <TopNav userInitials={userInitials} userName={userName} />
       <div className="flex flex-1 min-h-0">
         <AppSidebar
-          open={sidebarOpen}
-          onClose={() => setSidebarOpen(false)}
           customers={customers}
           totalCustomers={totalCustomers}
           myQueueCount={myQueueCount}

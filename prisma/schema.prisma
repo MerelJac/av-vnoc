@@ -70,6 +70,7 @@ enum TicketActionType {
   ESCALATE
   STATUS_CHANGE
   CONFIG_RESTORE
+  PORTAL_LAUNCH
 }
 
 model User {

@@ -22,6 +22,9 @@ vi.mock('@/lib/prisma', () => ({
     activityLog: {
       create: vi.fn(),
     },
+    appConfig: {
+      findUnique: vi.fn(),
+    },
   },
 }))
 
@@ -190,6 +193,44 @@ describe('processAlert - Ticket auto-creation', () => {
     const slaMs = (ticketCall.data.slaDeadline as Date).getTime()
     expect(slaMs).toBeGreaterThanOrEqual(before + 3_600_000 - 100)
     expect(slaMs).toBeLessThanOrEqual(after + 3_600_000 + 100)
+  })
+
+  it('derives priority and SLA deadline from AppConfig overrides', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({
+      id: 'device-1',
+      roomId: 'room-1',
+      room: { id: 'room-1', siteId: 'site-1', site: { id: 'site-1', customerId: 'customer-1', customer: { id: 'customer-1', name: 'Acme' } } },
+    } as any)
+    vi.mocked(prisma.alert.create).mockResolvedValue({ id: 'alert-1', roomId: 'room-1', title: 'Critical alert', severity: 'CRITICAL', description: null } as any)
+    vi.mocked(prisma.alert.count).mockResolvedValue(0)
+    vi.mocked(prisma.alertGroup.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.alertGroup.create).mockResolvedValue({ id: 'group-1' } as any)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.ticket.create).mockResolvedValue({ id: 'ticket-1', title: 'Critical alert', priority: 'P2' } as any)
+    vi.mocked(prisma.activityLog.create).mockResolvedValue({} as any)
+
+    // CRITICAL → P2 (override), P2 SLA = 5 minutes (override)
+    vi.mocked(prisma.appConfig.findUnique).mockImplementation((args: any) => {
+      if (args.where.key === 'sla') {
+        return Promise.resolve({ key: 'sla', value: { P1: 60, P2: 5, P3: 480, P4: 1440, autoResolveHours: 24 } }) as any
+      }
+      if (args.where.key === 'routing') {
+        return Promise.resolve({ key: 'routing', value: { severityToPriority: { CRITICAL: 'P2', HIGH: 'P2', MEDIUM: 'P3', LOW: 'P4', INFO: 'P4' } } }) as any
+      }
+      return Promise.resolve(null) as any
+    })
+
+    const before = Date.now()
+    await processAlert(makeAlert({ severity: 'CRITICAL' as AlertSeverity }))
+    const after = Date.now()
+
+    const ticketCall = vi.mocked(prisma.ticket.create).mock.calls[0][0]
+    expect(ticketCall.data.priority).toBe('P2')
+
+    const slaMs = (ticketCall.data.slaDeadline as Date).getTime()
+    expect(slaMs).toBeGreaterThanOrEqual(before + 5 * 60_000 - 100)
+    expect(slaMs).toBeLessThanOrEqual(after + 5 * 60_000 + 100)
   })
 
   it('emits alert_created and ticket_opened SSE events', async () => {

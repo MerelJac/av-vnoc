@@ -37,13 +37,13 @@ export function TopNav({ userInitials, userName, onMenuClick }: TopNavProps) {
       {/* Mobile hamburger */}
       <button
         onClick={onMenuClick}
-        className="md:hidden ml-2 w-8 h-8 flex items-center justify-center text-[#8892b0] hover:text-white transition-colors"
+        className="sm:hidden ml-2 w-8 h-8 flex items-center justify-center text-[#8892b0] hover:text-white transition-colors"
       >
         <Menu className="w-4 h-4" />
       </button>
 
       {/* Center nav */}
-      <nav className="hidden md:flex flex-1 items-center justify-center gap-1">
+      <nav className="hidden sm:flex flex-1 items-center justify-center gap-1">
         {NAV_LINKS.map(({ label, href }) => {
           if (!href) {
             return (

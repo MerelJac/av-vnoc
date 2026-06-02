@@ -97,7 +97,7 @@ export function AppSidebar({
       {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 sm:hidden"
           onClick={onClose}
         />
       )}
@@ -109,13 +109,13 @@ export function AppSidebar({
           flex flex-col
           transform transition-transform duration-200
           ${open ? "translate-x-0" : "-translate-x-full"}
-          md:static md:h-full md:translate-x-0
+          sm:static sm:h-full sm:translate-x-0
         `}
       >
         {/* Close button (mobile) */}
         <button
           onClick={onClose}
-          className="md:hidden absolute top-3 right-3 w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-[#8892b0] hover:text-white"
+          className="sm:hidden absolute top-3 right-3 w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-[#8892b0] hover:text-white"
         >
           <X className="w-3.5 h-3.5" />
         </button>

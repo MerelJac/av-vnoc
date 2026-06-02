@@ -48,7 +48,7 @@ export default function SidebarLayout({
           isSuperAdmin={isSuperAdmin}
           configuredPlatforms={configuredPlatforms}
         />
-        <main className="flex-1 min-h-0 flex flex-col overflow-y-auto bg-[#f0f2f8] p-6 pt-6">
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-x-hidden overflow-y-auto bg-[#f0f2f8] p-6 pt-6">
           {children}
         </main>
       </div>

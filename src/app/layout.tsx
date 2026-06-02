@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${orbitron.variable} ${dmSans.variable}`}>
+    <html lang="en" className={`${syne.variable} ${orbitron.variable} ${dmSans.variable}`}>
       <body
         className="bg-background text-foreground font-sans"
       >

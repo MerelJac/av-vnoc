@@ -2,10 +2,6 @@ import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined;
-};
-
 // Create connection pool (outside of instantiation)
 const connectionString = process.env.DATABASE_URL!;
 

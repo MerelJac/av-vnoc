@@ -36,7 +36,7 @@ class ConstructableMockEventSource {
 
   constructor(url: string) {
     this.url = url
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     mockES = this as any
   }
 

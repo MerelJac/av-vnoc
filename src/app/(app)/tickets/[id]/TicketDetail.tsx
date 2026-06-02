@@ -35,12 +35,11 @@ interface TicketDetailProps {
     customer?: { name: string } | null;
     assignee?: { profile?: { firstName: string; lastName: string } | null } | null;
   };
-  userId: string;
   vnocRole: VnocRole | null;
   isSuperAdmin: boolean;
 }
 
-export function TicketDetail({ ticket, userId, vnocRole, isSuperAdmin }: TicketDetailProps) {
+export function TicketDetail({ ticket, vnocRole, isSuperAdmin }: TicketDetailProps) {
   const [actions, setActions] = useState(ticket.actions);
   const [status, setStatus] = useState(ticket.status);
   const [note, setNote] = useState("");

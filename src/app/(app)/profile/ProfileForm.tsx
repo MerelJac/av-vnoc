@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { CheckCircle2, AlertCircle } from "lucide-react";
-import { LogoutButton } from "@/app/components/Logout";
 
 type Profile = {
   firstName: string;

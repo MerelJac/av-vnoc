@@ -10,16 +10,22 @@ import {
   Link2,
   X,
   Mail,
+  Power,
+  PowerOff,
 } from "lucide-react";
 
 type OrgRole = "MEMBER" | "ADMIN" | "OWNER";
+type VnocRole = "TIER1" | "TIER2" | "MANAGER";
+
+const VNOC_ROLES: VnocRole[] = ["TIER1", "TIER2", "MANAGER"];
 
 type UserRow = {
   id: string;
   email: string;
   isSuperAdmin: boolean;
+  active: boolean;
   createdAt: string;
-  profile: { firstName: string; lastName: string; phone: string | null } | null;
+  profile: { firstName: string; lastName: string; phone: string | null; vnocRole: VnocRole | null } | null;
 };
 
 type Invite = {
@@ -35,6 +41,7 @@ type Props = {
   initialUsers: UserRow[];
   initialInvites: Invite[];
   currentUserId: string;
+  currentUserIsSuperAdmin: boolean;
   appUrl: string;
 };
 
@@ -49,7 +56,7 @@ const roleBadge = (r: OrgRole) =>
 
 const blankForm = { firstName: "", lastName: "", email: "", phone: "", password: "" };
 
-export default function UsersManager({ initialUsers, initialInvites, currentUserId, appUrl }: Props) {
+export default function UsersManager({ initialUsers, initialInvites, currentUserId, currentUserIsSuperAdmin, appUrl }: Props) {
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [invites, setInvites] = useState<Invite[]>(initialInvites);
   const [toast, setToast] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -155,6 +162,66 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
       setDeleteId(null);
       showToast("success", "User removed");
     } catch (err) {
+      showToast("error", err instanceof Error ? err.message : "Error");
+    }
+  }
+
+  async function patchPermissions(userId: string, body: { vnocRole?: VnocRole | null; isSuperAdmin?: boolean }) {
+    const res = await fetch(`/api/users/${userId}/permissions`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error ?? "Failed to update permissions");
+    }
+  }
+
+  async function updateRole(userId: string, vnocRole: VnocRole | null) {
+    const prev = users;
+    setUsers((u) =>
+      u.map((row) =>
+        row.id === userId && row.profile ? { ...row, profile: { ...row.profile, vnocRole } } : row,
+      ),
+    );
+    try {
+      await patchPermissions(userId, { vnocRole });
+      showToast("success", "Role updated");
+    } catch (err) {
+      setUsers(prev);
+      showToast("error", err instanceof Error ? err.message : "Error");
+    }
+  }
+
+  async function toggleSuperAdmin(userId: string, isSuperAdmin: boolean) {
+    const prev = users;
+    setUsers((u) => u.map((row) => (row.id === userId ? { ...row, isSuperAdmin } : row)));
+    try {
+      await patchPermissions(userId, { isSuperAdmin });
+      showToast("success", isSuperAdmin ? "Granted super-admin" : "Revoked super-admin");
+    } catch (err) {
+      setUsers(prev);
+      showToast("error", err instanceof Error ? err.message : "Error");
+    }
+  }
+
+  async function toggleActive(userId: string, active: boolean) {
+    const prev = users;
+    setUsers((u) => u.map((row) => (row.id === userId ? { ...row, active } : row)));
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to update status");
+      }
+      showToast("success", active ? "User reactivated" : "User deactivated");
+    } catch (err) {
+      setUsers(prev);
       showToast("error", err instanceof Error ? err.message : "Error");
     }
   }
@@ -335,10 +402,45 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
                       <span className="text-sm font-medium text-[#111] truncate">{name}</span>
                       {isMe && <span className="text-[10px] font-semibold text-[#999] border border-[#E5E3DE] px-1.5 py-0.5 rounded-md">you</span>}
                       {user.isSuperAdmin && <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md bg-amber-50 text-amber-600 border border-amber-200">Super Admin</span>}
+                      {!user.active && <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md bg-red-50 text-red-600 border border-red-200">Inactive</span>}
                     </div>
                     <p className="text-xs text-[#999] truncate">{user.email}</p>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {currentUserIsSuperAdmin && (
+                      <>
+                        <select
+                          value={user.profile?.vnocRole ?? ""}
+                          disabled={!user.profile}
+                          onChange={(e) => updateRole(user.id, (e.target.value || null) as VnocRole | null)}
+                          className="text-xs text-[#444] border border-[#E5E3DE] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#111] transition-colors disabled:opacity-40"
+                          title={user.profile ? "VNOC role" : "No profile — invite must be accepted first"}
+                        >
+                          <option value="">No role</option>
+                          {VNOC_ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => !isMe && toggleSuperAdmin(user.id, !user.isSuperAdmin)}
+                          disabled={isMe}
+                          title={isMe ? "You cannot change your own super-admin access" : user.isSuperAdmin ? "Revoke super-admin" : "Grant super-admin"}
+                          className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1.5 rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${user.isSuperAdmin ? "border-amber-200 text-amber-600 bg-amber-50 hover:bg-amber-100" : "border-[#E5E3DE] text-[#999] hover:bg-[#F7F6F3]"}`}
+                        >
+                          SA
+                        </button>
+                        <button
+                          onClick={() => !isMe && toggleActive(user.id, !user.active)}
+                          disabled={isMe}
+                          title={isMe ? "You cannot deactivate your own account" : user.active ? "Deactivate user" : "Reactivate user"}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-[#999] hover:text-[#111] hover:bg-[#F7F6F3] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          {user.active ? <PowerOff size={13} /> : <Power size={13} />}
+                        </button>
+                      </>
+                    )}
                     <button onClick={() => openEdit(user)} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#999] hover:text-[#111] hover:bg-[#F7F6F3] transition-colors">
                       <Pencil size={13} />
                     </button>

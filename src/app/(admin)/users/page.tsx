@@ -14,8 +14,9 @@ export default async function UsersPage() {
         id: true,
         email: true,
         isSuperAdmin: true,
+        active: true,
         createdAt: true,
-        profile: { select: { firstName: true, lastName: true, phone: true } },
+        profile: { select: { firstName: true, lastName: true, phone: true, vnocRole: true } },
       },
       orderBy: { createdAt: "asc" },
     }),
@@ -41,6 +42,7 @@ export default async function UsersPage() {
           expiresAt: i.expiresAt.toISOString(),
         }))}
         currentUserId={session.user.id}
+        currentUserIsSuperAdmin={Boolean(session.user.isSuperAdmin)}
         appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
       />
     </div>

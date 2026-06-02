@@ -49,6 +49,48 @@ export async function PUT(
   return NextResponse.json(user);
 }
 
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.isSuperAdmin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  let raw: unknown;
+  try {
+    raw = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const { active } = (raw ?? {}) as { active?: unknown };
+  if (typeof active !== "boolean") {
+    return NextResponse.json({ error: "active must be a boolean" }, { status: 400 });
+  }
+
+  if (id === session.user.id && active === false) {
+    return NextResponse.json({ error: "You cannot deactivate your own account" }, { status: 400 });
+  }
+
+  const target = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true } });
+  if (!target) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  await prisma.user.update({ where: { id }, data: { active } });
+  await prisma.activityLog.create({
+    data: {
+      type: active ? "user_reactivated" : "user_deactivated",
+      userId: session.user.id,
+      message: `${active ? "Reactivated" : "Deactivated"} ${target.email}`,
+      meta: { targetUserId: id },
+    },
+  });
+
+  return NextResponse.json({ success: true, data: { id, active } });
+}
+
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },

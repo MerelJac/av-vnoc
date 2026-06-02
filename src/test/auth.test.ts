@@ -6,11 +6,30 @@ vi.mock('@/lib/prisma', () => ({
     profile: {
       findUnique: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
   },
+}))
+
+const { compareMock } = vi.hoisted(() => ({ compareMock: vi.fn() }))
+vi.mock('bcryptjs', () => ({
+  default: { compare: compareMock },
+  compare: compareMock,
 }))
 
 import { prisma } from '@/lib/prisma'
 import { authOptions } from '@/lib/auth'
+
+function getAuthorize(): Function {
+  // NextAuth's CredentialsProvider keeps the user-supplied authorize on
+  // `.options.authorize`; the top-level `.authorize` is a default `() => null` stub.
+  const provider = authOptions.providers[0] as unknown as {
+    authorize?: Function
+    options?: { authorize?: Function }
+  }
+  return (provider.options?.authorize ?? provider.authorize) as Function
+}
 
 describe('NextAuth jwt callback', () => {
   const jwtCallback = authOptions.callbacks!.jwt as Function
@@ -61,5 +80,33 @@ describe('NextAuth jwt callback', () => {
 
     expect(prisma.profile.findUnique).not.toHaveBeenCalled()
     expect(result.vnocRole).toBe('TIER1')
+  })
+})
+
+describe('CredentialsProvider authorize', () => {
+  const authorize = getAuthorize()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    compareMock.mockResolvedValue(true)
+  })
+
+  it('blocks login when the user is inactive', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: 'u-1', email: 'x@y.com', password: 'hashed', active: false,
+    } as never)
+
+    const result = await authorize({ email: 'x@y.com', password: 'pw' })
+    expect(result).toBeNull()
+    expect(compareMock).not.toHaveBeenCalled()
+  })
+
+  it('allows login when the user is active and password matches', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: 'u-1', email: 'x@y.com', password: 'hashed', active: true,
+    } as never)
+
+    const result = await authorize({ email: 'x@y.com', password: 'pw' })
+    expect(result).toMatchObject({ id: 'u-1' })
   })
 })

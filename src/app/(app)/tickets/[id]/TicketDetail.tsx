@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { VnocRole } from "@prisma/client";
 import { Clock, MessageSquare, RotateCw, ArrowUp, CheckCircle } from "lucide-react";
+import { PortalLaunchButton } from "./PortalLaunchButton";
+import type { PortalLink } from "@/lib/portal-links";
 
 interface Action {
   id: string;
@@ -37,9 +39,10 @@ interface TicketDetailProps {
   };
   vnocRole: VnocRole | null;
   isSuperAdmin: boolean;
+  portalLink?: PortalLink | null;
 }
 
-export function TicketDetail({ ticket, vnocRole, isSuperAdmin }: TicketDetailProps) {
+export function TicketDetail({ ticket, vnocRole, isSuperAdmin, portalLink }: TicketDetailProps) {
   const [actions, setActions] = useState(ticket.actions);
   const [status, setStatus] = useState(ticket.status);
   const [note, setNote] = useState("");
@@ -98,6 +101,13 @@ export function TicketDetail({ ticket, vnocRole, isSuperAdmin }: TicketDetailPro
             <p className="text-muted">
               {ticket.alert.device.room?.site?.name ?? ""} {ticket.alert.device.room?.name ?? ""} · Status: {ticket.alert.device.status}
             </p>
+            {portalLink && (
+              <PortalLaunchButton
+                ticketId={ticket.id}
+                portalLink={portalLink}
+                onLogged={(a) => setActions((prev) => [...prev, a as Action])}
+              />
+            )}
           </div>
         )}
       </div>

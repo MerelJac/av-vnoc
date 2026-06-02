@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { TicketDetail } from "./TicketDetail";
+import { buildPortalLink, type PortalLink } from "@/lib/portal-links";
 
 export default async function TicketPage({
   params,
@@ -43,6 +44,23 @@ export default async function TicketPage({
 
   if (!ticket) notFound();
 
+  // Build the vendor portal link server-side so PlatformCredential.config
+  // (which caches the OAuth access token) never reaches the client.
+  let portalLink: PortalLink | null = null;
+  const device = ticket.alert?.device;
+  if (device) {
+    const cred = await prisma.platformCredential.findUnique({
+      where: { platform: device.platform },
+      select: { config: true },
+    });
+    portalLink = buildPortalLink({
+      platform: device.platform,
+      platformId: device.platformId,
+      deviceRawPayload: device.rawPayload,
+      credentialConfig: (cred?.config as Record<string, unknown> | null) ?? null,
+    });
+  }
+
   // Serialize all Date fields for the client component
   const serialized = {
     ...ticket,
@@ -71,6 +89,7 @@ export default async function TicketPage({
       ticket={serialized as Parameters<typeof TicketDetail>[0]["ticket"]}
       vnocRole={session.user.vnocRole}
       isSuperAdmin={session.user.isSuperAdmin}
+      portalLink={portalLink}
     />
   );
 }

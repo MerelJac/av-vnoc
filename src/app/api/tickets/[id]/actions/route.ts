@@ -7,7 +7,7 @@ import { emitSseEvent } from "@/lib/sse-bus";
 import { VnocRole } from "@prisma/client";
 
 const ActionSchema = z.object({
-  type: z.enum(["NOTE", "REBOOT", "FIRMWARE_PUSH", "ESCALATE", "STATUS_CHANGE", "CONFIG_RESTORE"]),
+  type: z.enum(["NOTE", "REBOOT", "FIRMWARE_PUSH", "ESCALATE", "STATUS_CHANGE", "CONFIG_RESTORE", "PORTAL_LAUNCH"]),
   body: z.string().optional(),
   newStatus: z.enum(["OPEN", "IN_PROGRESS", "RESOLVED", "CLOSED"]).optional(),
 });
@@ -17,7 +17,7 @@ function canPerformAction(
   isSuperAdmin: boolean,
   vnocRole: VnocRole | null
 ): boolean {
-  const tier1Actions = new Set(["NOTE", "REBOOT", "STATUS_CHANGE"]);
+  const tier1Actions = new Set(["NOTE", "REBOOT", "STATUS_CHANGE", "PORTAL_LAUNCH"]);
   if (tier1Actions.has(actionType)) return true;
   if (actionType === "ESCALATE") {
     return isSuperAdmin || vnocRole === "TIER2" || vnocRole === "MANAGER";

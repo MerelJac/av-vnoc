@@ -70,6 +70,7 @@ enum TicketActionType {
   ESCALATE
   STATUS_CHANGE
   CONFIG_RESTORE
+  PORTAL_LAUNCH
 }
 
 model User {
@@ -77,6 +78,7 @@ model User {
   email        String   @unique
   password     String
   isSuperAdmin Boolean  @default(false)
+  active       Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -361,4 +363,10 @@ model PlatformCredential {
   config        Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model AppConfig {
+  key       String   @id // "org" | "sla" | "routing"
+  value     Json
+  updatedAt DateTime @updatedAt
 }

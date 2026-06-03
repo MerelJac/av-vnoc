@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { NormalizedAlert } from "@/lib/integrations/types";
 import { emitSseEvent } from "@/lib/sse-bus";
+import { getRoutingConfig, getSlaConfig } from "@/lib/app-config";
 import type { AlertSeverity, Platform, TicketPriority } from "@prisma/client";
 
 export type CorrelationAction = "deduped" | "suppressed" | "created";
@@ -11,21 +12,6 @@ export interface CorrelationResult {
   alertId?: string;
   ticketId?: string;
 }
-
-const SEVERITY_TO_PRIORITY: Record<AlertSeverity, TicketPriority> = {
-  CRITICAL: "P1",
-  HIGH: "P2",
-  MEDIUM: "P3",
-  LOW: "P4",
-  INFO: "P4",
-};
-
-const SLA_HOURS: Record<TicketPriority, number> = {
-  P1: 1,
-  P2: 4,
-  P3: 8,
-  P4: 24,
-};
 
 // Prisma type for device with room/site/customer
 type DeviceWithRoom = Prisma.DeviceGetPayload<{
@@ -37,8 +23,10 @@ async function createTicketForAlert(
   platform: Platform,
   customerId: string | null
 ): Promise<{ id: string; title: string; priority: TicketPriority }> {
-  const priority = SEVERITY_TO_PRIORITY[alert.severity];
-  const slaDeadline = new Date(Date.now() + SLA_HOURS[priority] * 3_600_000);
+  // Severity→priority mapping and SLA targets are admin-configurable (AppConfig).
+  const [routing, sla] = await Promise.all([getRoutingConfig(), getSlaConfig()]);
+  const priority = routing.severityToPriority[alert.severity];
+  const slaDeadline = new Date(Date.now() + sla[priority] * 60_000);
 
   const ticket = await prisma.ticket.create({
     data: {

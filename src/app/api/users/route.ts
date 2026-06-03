@@ -53,8 +53,9 @@ export async function POST(req: NextRequest) {
       id: true,
       email: true,
       isSuperAdmin: true,
+      active: true,
       createdAt: true,
-      profile: { select: { firstName: true, lastName: true, phone: true } },
+      profile: { select: { firstName: true, lastName: true, phone: true, vnocRole: true } },
     },
   });
 

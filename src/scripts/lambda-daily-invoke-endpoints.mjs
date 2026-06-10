@@ -4,6 +4,10 @@ export const handler = async () => {
   const endpoints = [
     "https://stg.dbgb8i1b7y9da.amplifyapp.com/api/cron/daily",
     "https://calloneav.com/api/cron/daily",
+    // Vendor alert polling + auto-resolve sweep (also worth scheduling more
+    // frequently than daily — see /api/cron/alerts)
+    "https://stg.dbgb8i1b7y9da.amplifyapp.com/api/cron/alerts",
+    "https://calloneav.com/api/cron/alerts",
   ];
 
   const results = [];

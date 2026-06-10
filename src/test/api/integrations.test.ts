@@ -321,6 +321,51 @@ describe("PUT /api/integrations — LOGITECH_SYNC config validation", () => {
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 
+  it("rejects a UTELOGY config with an invalid baseUrl", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindUnique.mockResolvedValueOnce(null);
+
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({
+        platform: "UTELOGY",
+        apiKey: "ute-key",
+        config: { baseUrl: "not-a-url" },
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(400);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it("accepts a UTELOGY config with a valid baseUrl and preserves other config keys", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindUnique.mockResolvedValueOnce({
+      config: { baseUrl: "https://old.utelogy.com", lastPolledAt: "2026-06-01T00:00:00Z" },
+    } as never);
+    mockUpsert.mockResolvedValueOnce({} as never);
+
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({
+        platform: "UTELOGY",
+        config: { baseUrl: "https://acme.utelogy.com" },
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(200);
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as { update: { config?: Record<string, unknown> } };
+    expect(upsertCall.update.config).toMatchObject({
+      baseUrl: "https://acme.utelogy.com",
+      lastPolledAt: "2026-06-01T00:00:00Z",
+    });
+  });
+
   it("preserves the stored key when the form omits or blanks write-only fields", async () => {
     mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
     mockFindUnique.mockResolvedValueOnce({

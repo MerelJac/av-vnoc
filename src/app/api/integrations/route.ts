@@ -14,6 +14,15 @@ function maskSecret(value: string | null): string | null {
   return "••••••••";
 }
 
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -81,8 +90,20 @@ export async function PUT(req: NextRequest) {
   const rotatingCreds = "clientId" in updateData || "clientSecret" in updateData;
   const isLogiConfigUpdate =
     platform === Platform.LOGITECH_SYNC && body.config !== undefined;
+  const isUtelogyConfigUpdate =
+    platform === Platform.UTELOGY && body.config !== undefined;
 
-  if (rotatingCreds || isLogiConfigUpdate) {
+  if (isUtelogyConfigUpdate) {
+    const baseUrl = body.config?.baseUrl;
+    if (typeof baseUrl !== "string" || !isHttpUrl(baseUrl)) {
+      return NextResponse.json(
+        { error: "Utelogy requires a valid instance baseUrl (https://<tenant>.utelogy.com)" },
+        { status: 400 },
+      );
+    }
+  }
+
+  if (rotatingCreds || isLogiConfigUpdate || isUtelogyConfigUpdate) {
     // Read existing config to preserve other fields (like tenantId / stored certs)
     const existing = await prisma.platformCredential.findUnique({
       where: { platform },

@@ -3,6 +3,7 @@ import { NormalizedDevice } from "./types";
 import { createPolyLensAdapter } from "./poly-lens";
 import { createYealinkAdapter } from "./yealink";
 import { createLogiSyncAdapter } from "./logitech-sync";
+import { createUtelogyAdapter } from "./utelogy";
 
 async function upsertDevice(device: NormalizedDevice): Promise<void> {
   const { platform, platformId, name, model, firmware, ipAddress, macAddress, status, lastSeenAt, rawPayload } = device;
@@ -37,10 +38,11 @@ async function upsertDevice(device: NormalizedDevice): Promise<void> {
 }
 
 export async function syncAllDevices(): Promise<{ synced: number; errors: string[] }> {
-  const [polyResult, yealinkResult, logiResult] = await Promise.allSettled([
+  const [polyResult, yealinkResult, logiResult, utelogyResult] = await Promise.allSettled([
     createPolyLensAdapter(),
     createYealinkAdapter(),
     createLogiSyncAdapter(),
+    createUtelogyAdapter(),
   ]);
 
   const adapters: Array<Awaited<ReturnType<typeof createPolyLensAdapter>>> = [];
@@ -62,6 +64,12 @@ export async function syncAllDevices(): Promise<{ synced: number; errors: string
     adapters.push(logiResult.value);
   } else {
     errors.push(`LogitechSync adapter init failed: ${String(logiResult.reason)}`);
+  }
+
+  if (utelogyResult.status === "fulfilled") {
+    adapters.push(utelogyResult.value);
+  } else {
+    errors.push(`Utelogy adapter init failed: ${String(utelogyResult.reason)}`);
   }
 
   let synced = 0;

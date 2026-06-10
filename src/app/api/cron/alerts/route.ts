@@ -3,6 +3,7 @@ import { Platform } from "@prisma/client";
 import { createPolyLensAdapter } from "@/lib/integrations/poly-lens";
 import { createYealinkAdapter } from "@/lib/integrations/yealink";
 import { createLogiSyncAdapter } from "@/lib/integrations/logitech-sync";
+import { createUtelogyAdapter } from "@/lib/integrations/utelogy";
 import { PlatformAdapter } from "@/lib/integrations/types";
 import { getConfig, updateConfig } from "@/lib/integrations/credentials";
 import { processAlert, runAutoResolveSweep } from "@/lib/correlation";
@@ -19,6 +20,7 @@ const POLLED_PLATFORMS: ReadonlyArray<{
   { platform: Platform.POLY_LENS, createAdapter: createPolyLensAdapter },
   { platform: Platform.YEALINK_YMCS, createAdapter: createYealinkAdapter },
   { platform: Platform.LOGITECH_SYNC, createAdapter: createLogiSyncAdapter },
+  { platform: Platform.UTELOGY, createAdapter: createUtelogyAdapter },
 ];
 
 async function pollPlatform(

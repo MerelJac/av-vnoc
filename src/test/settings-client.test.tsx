@@ -11,6 +11,33 @@ beforeEach(() => {
   vi.stubGlobal("fetch", mockFetch);
 });
 
+describe("SettingsClient — Utelogy card", () => {
+  it("renders the Utelogy section and submits apiKey + baseUrl", async () => {
+    const user = userEvent.setup();
+    render(<SettingsClient />);
+
+    expect(screen.getByRole("heading", { name: "Utelogy" })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/^API Key/), "ute-key-1");
+    await user.type(screen.getByLabelText(/Instance Base URL/), "https://acme.utelogy.com");
+
+    const card = screen
+      .getByRole("heading", { name: "Utelogy" })
+      .closest("div") as HTMLElement;
+    const saveButton = Array.from(card.querySelectorAll("button")).find((b) =>
+      /save/i.test(b.textContent ?? "")
+    ) as HTMLButtonElement;
+    await user.click(saveButton);
+
+    const body = JSON.parse(
+      (mockFetch.mock.calls[0][1] as RequestInit).body as string
+    ) as { platform: string; apiKey: string; config: Record<string, string> };
+    expect(body.platform).toBe("UTELOGY");
+    expect(body.apiKey).toBe("ute-key-1");
+    expect(body.config).toMatchObject({ baseUrl: "https://acme.utelogy.com" });
+  });
+});
+
 describe("SettingsClient — Logitech Sync card", () => {
   it("renders the Logitech Sync section with PEM textareas", () => {
     render(<SettingsClient />);

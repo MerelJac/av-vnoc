@@ -27,6 +27,18 @@ const PLATFORMS = [
     ],
   },
   {
+    id: "UTELOGY",
+    label: "Utelogy",
+    credFields: [{ key: "apiKey", label: "API Key", type: "password" as const }],
+    configFields: [
+      {
+        key: "baseUrl",
+        label: "Instance Base URL (https://<tenant>.utelogy.com)",
+        type: "text" as const,
+      },
+    ],
+  },
+  {
     id: "LOGITECH_SYNC",
     label: "Logitech Sync",
     credFields: [],

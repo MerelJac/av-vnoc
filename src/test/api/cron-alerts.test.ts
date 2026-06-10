@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/integrations/poly-lens", () => ({ createPolyLensAdapter: vi.fn() }));
 vi.mock("@/lib/integrations/yealink", () => ({ createYealinkAdapter: vi.fn() }));
 vi.mock("@/lib/integrations/logitech-sync", () => ({ createLogiSyncAdapter: vi.fn() }));
+vi.mock("@/lib/integrations/utelogy", () => ({ createUtelogyAdapter: vi.fn() }));
 vi.mock("@/lib/integrations/credentials", () => ({
   getConfig: vi.fn(),
   updateConfig: vi.fn(),
@@ -17,12 +18,14 @@ import { GET } from "@/app/api/cron/alerts/route";
 import { createPolyLensAdapter } from "@/lib/integrations/poly-lens";
 import { createYealinkAdapter } from "@/lib/integrations/yealink";
 import { createLogiSyncAdapter } from "@/lib/integrations/logitech-sync";
+import { createUtelogyAdapter } from "@/lib/integrations/utelogy";
 import { getConfig, updateConfig } from "@/lib/integrations/credentials";
 import { processAlert, runAutoResolveSweep } from "@/lib/correlation";
 
 const mockPoly = vi.mocked(createPolyLensAdapter);
 const mockYealink = vi.mocked(createYealinkAdapter);
 const mockLogi = vi.mocked(createLogiSyncAdapter);
+const mockUtelogy = vi.mocked(createUtelogyAdapter);
 const mockGetConfig = vi.mocked(getConfig);
 const mockUpdateConfig = vi.mocked(updateConfig);
 const mockProcessAlert = vi.mocked(processAlert);
@@ -66,10 +69,11 @@ describe("GET /api/cron/alerts", () => {
     expect(res.status).toBe(401);
   });
 
-  it("polls Poly, Yealink, and Logitech and processes their alerts", async () => {
+  it("polls Poly, Yealink, Logitech, and Utelogy and processes their alerts", async () => {
     mockPoly.mockResolvedValue(makeAdapter([{ platformAlertId: "p1" }]));
     mockYealink.mockResolvedValue(makeAdapter([{ platformAlertId: "y1" }]));
     mockLogi.mockResolvedValue(makeAdapter([{ platformAlertId: "l1" }]));
+    mockUtelogy.mockResolvedValue(makeAdapter([{ platformAlertId: "u1" }]));
 
     const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`));
     const body = (await res.json()) as {
@@ -81,9 +85,10 @@ describe("GET /api/cron/alerts", () => {
     expect(body.results.POLY_LENS.processed).toBe(1);
     expect(body.results.YEALINK_YMCS.processed).toBe(1);
     expect(body.results.LOGITECH_SYNC.processed).toBe(1);
-    expect(mockProcessAlert).toHaveBeenCalledTimes(3);
+    expect(body.results.UTELOGY.processed).toBe(1);
+    expect(mockProcessAlert).toHaveBeenCalledTimes(4);
     expect(mockUpdateConfig).toHaveBeenCalledWith(
-      "LOGITECH_SYNC",
+      "UTELOGY",
       expect.objectContaining({ lastPolledAt: expect.any(String) })
     );
   });
@@ -92,6 +97,7 @@ describe("GET /api/cron/alerts", () => {
     mockPoly.mockRejectedValue(new Error("poly creds missing"));
     mockYealink.mockResolvedValue(makeAdapter([]));
     mockLogi.mockResolvedValue(makeAdapter([]));
+    mockUtelogy.mockResolvedValue(makeAdapter([]));
 
     const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`));
     const body = (await res.json()) as {
@@ -108,6 +114,7 @@ describe("GET /api/cron/alerts", () => {
     mockPoly.mockResolvedValue(makeAdapter([]));
     mockYealink.mockResolvedValue(makeAdapter([]));
     mockLogi.mockResolvedValue(makeAdapter([]));
+    mockUtelogy.mockResolvedValue(makeAdapter([]));
     mockSweep.mockResolvedValue({ resolved: 4 });
 
     const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`));

@@ -14,11 +14,15 @@ vi.mock('@/lib/integrations/yealink', () => ({
 vi.mock('@/lib/integrations/logitech-sync', () => ({
   createLogiSyncAdapter: vi.fn(),
 }))
+vi.mock('@/lib/integrations/utelogy', () => ({
+  createUtelogyAdapter: vi.fn(),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { createPolyLensAdapter } from '@/lib/integrations/poly-lens'
 import { createYealinkAdapter } from '@/lib/integrations/yealink'
 import { createLogiSyncAdapter } from '@/lib/integrations/logitech-sync'
+import { createUtelogyAdapter } from '@/lib/integrations/utelogy'
 import { syncAllDevices } from '@/lib/integrations/sync'
 
 const makeAdapter = (devices: unknown[]) => ({
@@ -64,6 +68,7 @@ describe('syncAllDevices', () => {
     })
 
     vi.mocked(createLogiSyncAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createUtelogyAdapter).mockRejectedValue(new Error('no creds'))
     vi.mocked(prisma.device.upsert).mockResolvedValue({} as any)
 
     await syncAllDevices()
@@ -71,9 +76,42 @@ describe('syncAllDevices', () => {
     expect(prisma.device.upsert).toHaveBeenCalledTimes(2)
   })
 
+  it('syncs Utelogy devices and records its init failures independently', async () => {
+    vi.mocked(createPolyLensAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createYealinkAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createLogiSyncAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createUtelogyAdapter).mockResolvedValue(
+      makeAdapter([
+        {
+          platform: 'UTELOGY' as const,
+          platformId: 'ute-1',
+          name: 'Boardroom Codec',
+          status: 'online' as const,
+          rawPayload: {},
+        },
+      ]) as any
+    )
+    vi.mocked(prisma.device.upsert).mockResolvedValue({} as any)
+
+    const result = await syncAllDevices()
+
+    expect(createUtelogyAdapter).toHaveBeenCalledOnce()
+    expect(result.synced).toBe(1)
+
+    vi.clearAllMocks()
+    vi.mocked(createPolyLensAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createYealinkAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createLogiSyncAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createUtelogyAdapter).mockRejectedValue(new Error('bad baseUrl'))
+
+    const failed = await syncAllDevices()
+    expect(failed.errors.some((e) => e.includes('Utelogy'))).toBe(true)
+  })
+
   it('syncs Logitech Sync devices alongside the other adapters', async () => {
     vi.mocked(createPolyLensAdapter).mockRejectedValue(new Error('no creds'))
     vi.mocked(createYealinkAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createUtelogyAdapter).mockRejectedValue(new Error('no creds'))
     vi.mocked(createLogiSyncAdapter).mockResolvedValue(
       makeAdapter([
         {
@@ -102,6 +140,7 @@ describe('syncAllDevices', () => {
     )
     vi.mocked(createYealinkAdapter).mockRejectedValue(new Error('no creds'))
     vi.mocked(createLogiSyncAdapter).mockRejectedValue(new Error('cert missing'))
+    vi.mocked(createUtelogyAdapter).mockRejectedValue(new Error('no creds'))
     vi.mocked(prisma.device.upsert).mockResolvedValue({} as any)
 
     const result = await syncAllDevices()

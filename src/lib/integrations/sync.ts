@@ -4,6 +4,7 @@ import { createPolyLensAdapter } from "./poly-lens";
 import { createYealinkAdapter } from "./yealink";
 import { createLogiSyncAdapter } from "./logitech-sync";
 import { createUtelogyAdapter } from "./utelogy";
+import { logError } from "@/lib/logger";
 
 async function upsertDevice(device: NormalizedDevice): Promise<void> {
   const { platform, platformId, name, model, firmware, ipAddress, macAddress, status, lastSeenAt, rawPayload } = device;
@@ -80,6 +81,7 @@ export async function syncAllDevices(): Promise<{ synced: number; errors: string
       await Promise.all(devices.map(upsertDevice));
       synced += devices.length;
     } catch (err) {
+      logError("sync", "adapter device sync failed", { error: err as Error });
       errors.push(`Adapter sync failed: ${String(err)}`);
     }
   }

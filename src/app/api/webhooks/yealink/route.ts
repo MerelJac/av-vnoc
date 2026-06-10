@@ -5,6 +5,7 @@ import { processAlert } from "@/lib/correlation";
 import { emitSseEvent } from "@/lib/sse-bus";
 import { AlertSeverity } from "@prisma/client";
 import { checkRateLimit, clientIpFrom } from "@/lib/rate-limit";
+import { logError } from "@/lib/logger";
 
 const RATE_LIMIT = { limit: 120, windowMs: 60 * 1000 };
 
@@ -149,6 +150,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
+      logError("webhook:yealink", "event processing failed", {
+        eventId: event.id,
+        eventType: event.type,
+        error: message,
+      });
       await prisma.webhookEvent.update({
         where: { id: webhookRecord.id },
         data: { error: message },

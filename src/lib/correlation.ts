@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { NormalizedAlert } from "@/lib/integrations/types";
 import { emitSseEvent } from "@/lib/sse-bus";
+import { logWarn } from "@/lib/logger";
 import { getRoutingConfig, getSlaConfig } from "@/lib/app-config";
 import type { AlertSeverity, Platform, TicketPriority } from "@prisma/client";
 
@@ -47,7 +48,7 @@ async function findDeviceForAlert(
   // MACs are stored lowercase by sync (and compared lowercase here) so the
   // exact-equality lookup can use the [platform, macAddress] index. Oldest
   // device wins when duplicates share a MAC (re-provisioned hardware).
-  return prisma.device.findFirst({
+  const byMac = await prisma.device.findFirst({
     where: {
       platform: normalized.platform,
       macAddress: normalized.platformDeviceId.toLowerCase(),
@@ -55,6 +56,16 @@ async function findDeviceForAlert(
     orderBy: { createdAt: "asc" },
     include: deviceWithRoomInclude,
   });
+
+  if (byMac) {
+    logWarn("correlation", "device resolved via MAC fallback", {
+      platform: normalized.platform,
+      mac: normalized.platformDeviceId.toLowerCase(),
+      deviceId: byMac.id,
+    });
+  }
+
+  return byMac;
 }
 
 async function createTicketForAlert(

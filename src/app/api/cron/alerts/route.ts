@@ -7,6 +7,7 @@ import { createUtelogyAdapter } from "@/lib/integrations/utelogy";
 import { PlatformAdapter } from "@/lib/integrations/types";
 import { getConfig, updateConfig } from "@/lib/integrations/credentials";
 import { processAlert, runAutoResolveSweep } from "@/lib/correlation";
+import { logError } from "@/lib/logger";
 
 interface PollResult {
   processed: number;
@@ -48,8 +49,12 @@ async function pollPlatform(
     }
 
     await updateConfig(platform, { lastPolledAt: new Date().toISOString() });
+    if (errors.length > 0) {
+      logError("cron:alerts", "some alerts failed to process", { platform, errors });
+    }
     return { processed, errors };
   } catch (err) {
+    logError("cron:alerts", "platform poll failed", { platform, error: err as Error });
     return { processed: 0, errors: [(err as Error).message] };
   }
 }

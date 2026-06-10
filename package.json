@@ -33,6 +33,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-spinners": "^0.17.0",
+    "undici": "^8.4.1",
     "zod": "^4.3.5"
   },
   "devDependencies": {

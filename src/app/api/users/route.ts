@@ -5,6 +5,14 @@ import { authOptions } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!session.user?.isSuperAdmin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const users = await prisma.user.findMany({
     select: {
       id: true,

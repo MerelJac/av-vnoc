@@ -5,6 +5,8 @@ frontend:
       commands:
         - npm install
         - npx prisma generate
+        # Apply any pending migrations before building (no-op when current)
+        - npx prisma migrate deploy
     build:
       commands:
         - NODE_ENV=production npm run build
@@ -21,6 +23,15 @@ frontend:
         - echo "VERTEX_TRUSTED_ID=$VERTEX_TRUSTED_ID" >> .env
         - echo "VERTEX_COMPANY_CODE=$VERTEX_COMPANY_CODE" >> .env
         - echo "VERTEX_ENDPOINT=$VERTEX_ENDPOINT" >> .env
+        - echo "NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL" >> .env
+        - echo "POLY_LENS_CLIENT_ID=$POLY_LENS_CLIENT_ID" >> .env
+        - echo "POLY_LENS_CLIENT_SECRET=$POLY_LENS_CLIENT_SECRET" >> .env
+        - echo "POLY_LENS_TENANT_ID=$POLY_LENS_TENANT_ID" >> .env
+        - echo "POLY_LENS_WEBHOOK_SECRET=$POLY_LENS_WEBHOOK_SECRET" >> .env
+        - echo "YMCS_CLIENT_ID=$YMCS_CLIENT_ID" >> .env
+        - echo "YMCS_CLIENT_SECRET=$YMCS_CLIENT_SECRET" >> .env
+        - echo "YMCS_REGION=$YMCS_REGION" >> .env
+        - echo "YMCS_WEBHOOK_SECRET=$YMCS_WEBHOOK_SECRET" >> .env
 
   artifacts:
     baseDirectory: .next

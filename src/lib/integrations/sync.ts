@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NormalizedDevice } from "./types";
 import { createPolyLensAdapter } from "./poly-lens";
 import { createYealinkAdapter } from "./yealink";
+import { createLogiSyncAdapter } from "./logitech-sync";
 
 async function upsertDevice(device: NormalizedDevice): Promise<void> {
   const { platform, platformId, name, model, firmware, ipAddress, macAddress, status, lastSeenAt, rawPayload } = device;
@@ -36,9 +37,10 @@ async function upsertDevice(device: NormalizedDevice): Promise<void> {
 }
 
 export async function syncAllDevices(): Promise<{ synced: number; errors: string[] }> {
-  const [polyResult, yealinkResult] = await Promise.allSettled([
+  const [polyResult, yealinkResult, logiResult] = await Promise.allSettled([
     createPolyLensAdapter(),
     createYealinkAdapter(),
+    createLogiSyncAdapter(),
   ]);
 
   const adapters: Array<Awaited<ReturnType<typeof createPolyLensAdapter>>> = [];
@@ -54,6 +56,12 @@ export async function syncAllDevices(): Promise<{ synced: number; errors: string
     adapters.push(yealinkResult.value);
   } else {
     errors.push(`Yealink adapter init failed: ${String(yealinkResult.reason)}`);
+  }
+
+  if (logiResult.status === "fulfilled") {
+    adapters.push(logiResult.value);
+  } else {
+    errors.push(`LogitechSync adapter init failed: ${String(logiResult.reason)}`);
   }
 
   let synced = 0;

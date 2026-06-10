@@ -11,11 +11,23 @@ vi.mock('@/lib/integrations/poly-lens', () => ({
 vi.mock('@/lib/integrations/yealink', () => ({
   createYealinkAdapter: vi.fn(),
 }))
+vi.mock('@/lib/integrations/logitech-sync', () => ({
+  createLogiSyncAdapter: vi.fn(),
+}))
 
 import { prisma } from '@/lib/prisma'
 import { createPolyLensAdapter } from '@/lib/integrations/poly-lens'
 import { createYealinkAdapter } from '@/lib/integrations/yealink'
+import { createLogiSyncAdapter } from '@/lib/integrations/logitech-sync'
 import { syncAllDevices } from '@/lib/integrations/sync'
+
+const makeAdapter = (devices: unknown[]) => ({
+  syncDevices: vi.fn().mockResolvedValue(devices),
+  fetchRecentAlerts: vi.fn(),
+  normalizeWebhookPayload: vi.fn(),
+  verifyWebhookSignature: vi.fn(),
+  rebootDevice: vi.fn(),
+})
 
 describe('syncAllDevices', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -51,10 +63,50 @@ describe('syncAllDevices', () => {
       rebootDevice: vi.fn(),
     })
 
+    vi.mocked(createLogiSyncAdapter).mockRejectedValue(new Error('no creds'))
     vi.mocked(prisma.device.upsert).mockResolvedValue({} as any)
 
     await syncAllDevices()
 
     expect(prisma.device.upsert).toHaveBeenCalledTimes(2)
+  })
+
+  it('syncs Logitech Sync devices alongside the other adapters', async () => {
+    vi.mocked(createPolyLensAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createYealinkAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createLogiSyncAdapter).mockResolvedValue(
+      makeAdapter([
+        {
+          platform: 'LOGITECH_SYNC' as const,
+          platformId: 'logi-1',
+          name: 'Rally Bar',
+          status: 'online' as const,
+          rawPayload: {},
+        },
+      ]) as any
+    )
+    vi.mocked(prisma.device.upsert).mockResolvedValue({} as any)
+
+    const result = await syncAllDevices()
+
+    expect(createLogiSyncAdapter).toHaveBeenCalledOnce()
+    expect(prisma.device.upsert).toHaveBeenCalledTimes(1)
+    expect(result.synced).toBe(1)
+  })
+
+  it('records Logitech init failure in errors without blocking other adapters', async () => {
+    vi.mocked(createPolyLensAdapter).mockResolvedValue(
+      makeAdapter([
+        { platform: 'POLY_LENS' as const, platformId: 'p1', name: 'X50', status: 'online' as const, rawPayload: {} },
+      ]) as any
+    )
+    vi.mocked(createYealinkAdapter).mockRejectedValue(new Error('no creds'))
+    vi.mocked(createLogiSyncAdapter).mockRejectedValue(new Error('cert missing'))
+    vi.mocked(prisma.device.upsert).mockResolvedValue({} as any)
+
+    const result = await syncAllDevices()
+
+    expect(result.synced).toBe(1)
+    expect(result.errors.some((e) => e.includes('LogitechSync'))).toBe(true)
   })
 })

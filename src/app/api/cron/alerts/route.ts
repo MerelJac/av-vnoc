@@ -1,8 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Platform } from "@prisma/client";
 import { createPolyLensAdapter } from "@/lib/integrations/poly-lens";
 import { createYealinkAdapter } from "@/lib/integrations/yealink";
+import { createLogiSyncAdapter } from "@/lib/integrations/logitech-sync";
+import { PlatformAdapter } from "@/lib/integrations/types";
 import { getConfig, updateConfig } from "@/lib/integrations/credentials";
 import { processAlert, runAutoResolveSweep } from "@/lib/correlation";
+
+interface PollResult {
+  processed: number;
+  errors: string[];
+}
+
+const POLLED_PLATFORMS: ReadonlyArray<{
+  platform: Platform;
+  createAdapter: () => Promise<PlatformAdapter>;
+}> = [
+  { platform: Platform.POLY_LENS, createAdapter: createPolyLensAdapter },
+  { platform: Platform.YEALINK_YMCS, createAdapter: createYealinkAdapter },
+  { platform: Platform.LOGITECH_SYNC, createAdapter: createLogiSyncAdapter },
+];
+
+async function pollPlatform(
+  platform: Platform,
+  createAdapter: () => Promise<PlatformAdapter>
+): Promise<PollResult> {
+  try {
+    const config = await getConfig(platform);
+    const since = config.lastPolledAt
+      ? new Date(config.lastPolledAt as string)
+      : new Date(Date.now() - 10 * 60_000);
+
+    const adapter = await createAdapter();
+    const alerts = await adapter.fetchRecentAlerts(since);
+
+    let processed = 0;
+    const errors: string[] = [];
+    for (const alert of alerts) {
+      try {
+        await processAlert(alert);
+        processed++;
+      } catch (err) {
+        errors.push((err as Error).message);
+      }
+    }
+
+    await updateConfig(platform, { lastPolledAt: new Date().toISOString() });
+    return { processed, errors };
+  } catch (err) {
+    return { processed: 0, errors: [(err as Error).message] };
+  }
+}
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -10,54 +58,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const results: Record<string, { processed: number; errors: string[] }> = {};
+  const results: Record<string, PollResult> = {};
 
-  // Poll Poly Lens
-  try {
-    const config = await getConfig("POLY_LENS");
-    const since = config.lastPolledAt
-      ? new Date(config.lastPolledAt as string)
-      : new Date(Date.now() - 10 * 60_000);
-    const adapter = await createPolyLensAdapter();
-    const alerts = await adapter.fetchRecentAlerts(since);
-    let processed = 0;
-    const errors: string[] = [];
-    for (const alert of alerts) {
-      try {
-        await processAlert(alert);
-        processed++;
-      } catch (err) {
-        errors.push((err as Error).message);
-      }
-    }
-    await updateConfig("POLY_LENS", { lastPolledAt: new Date().toISOString() });
-    results["POLY_LENS"] = { processed, errors };
-  } catch (err) {
-    results["POLY_LENS"] = { processed: 0, errors: [(err as Error).message] };
-  }
-
-  // Poll Yealink YMCS
-  try {
-    const config = await getConfig("YEALINK_YMCS");
-    const since = config.lastPolledAt
-      ? new Date(config.lastPolledAt as string)
-      : new Date(Date.now() - 10 * 60_000);
-    const adapter = await createYealinkAdapter();
-    const alerts = await adapter.fetchRecentAlerts(since);
-    let processed = 0;
-    const errors: string[] = [];
-    for (const alert of alerts) {
-      try {
-        await processAlert(alert);
-        processed++;
-      } catch (err) {
-        errors.push((err as Error).message);
-      }
-    }
-    await updateConfig("YEALINK_YMCS", { lastPolledAt: new Date().toISOString() });
-    results["YEALINK_YMCS"] = { processed, errors };
-  } catch (err) {
-    results["YEALINK_YMCS"] = { processed: 0, errors: [(err as Error).message] };
+  for (const { platform, createAdapter } of POLLED_PLATFORMS) {
+    results[platform] = await pollPlatform(platform, createAdapter);
   }
 
   let autoResolved = 0;

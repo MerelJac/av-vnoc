@@ -26,6 +26,29 @@ const PLATFORMS = [
       { key: "region", label: "Region (us / eu / au)", type: "text" as const },
     ],
   },
+  {
+    id: "LOGITECH_SYNC",
+    label: "Logitech Sync",
+    credFields: [],
+    configFields: [
+      { key: "orgId", label: "Org ID (from the Sync Portal)", type: "text" as const },
+      {
+        key: "apiServer",
+        label: "API Server (optional — defaults to https://api.sync.logitech.com/v1)",
+        type: "text" as const,
+      },
+      {
+        key: "certPem",
+        label: "Client Certificate (PEM — leave blank to keep the saved one)",
+        type: "textarea" as const,
+      },
+      {
+        key: "keyPem",
+        label: "Private Key (PEM — write-only, leave blank to keep the saved one)",
+        type: "textarea" as const,
+      },
+    ],
+  },
 ] as const;
 
 type PlatformId = (typeof PLATFORMS)[number]["id"];
@@ -130,8 +153,14 @@ export function SettingsClient() {
 
           {platform.credFields.map((field) => (
             <div key={field.key}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+              <label
+                htmlFor={`${platform.id}-${field.key}`}
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                {field.label}
+              </label>
               <input
+                id={`${platform.id}-${field.key}`}
                 type={field.type}
                 placeholder={field.type === "password" ? "••••••••" : ""}
                 value={values[platform.id]?.creds[field.key] ?? ""}
@@ -148,14 +177,30 @@ export function SettingsClient() {
               </p>
               {platform.configFields.map((field) => (
                 <div key={field.key} className="mb-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
-                  <input
-                    type={field.type}
-                    placeholder=""
-                    value={values[platform.id]?.config[field.key] ?? ""}
-                    onChange={(e) => onConfigChange(platform.id, field.key, e.target.value)}
-                    className="w-full rounded-md bg-white border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  <label
+                    htmlFor={`${platform.id}-${field.key}`}
+                    className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    {field.label}
+                  </label>
+                  {field.type === "textarea" ? (
+                    <textarea
+                      id={`${platform.id}-${field.key}`}
+                      rows={4}
+                      value={values[platform.id]?.config[field.key] ?? ""}
+                      onChange={(e) => onConfigChange(platform.id, field.key, e.target.value)}
+                      className="w-full rounded-md bg-white border border-gray-300 px-3 py-2 text-sm font-mono text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  ) : (
+                    <input
+                      id={`${platform.id}-${field.key}`}
+                      type={field.type}
+                      placeholder=""
+                      value={values[platform.id]?.config[field.key] ?? ""}
+                      onChange={(e) => onConfigChange(platform.id, field.key, e.target.value)}
+                      className="w-full rounded-md bg-white border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  )}
                 </div>
               ))}
             </div>

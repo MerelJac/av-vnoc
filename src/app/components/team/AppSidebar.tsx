@@ -24,6 +24,8 @@ interface AppSidebarProps {
   myQueueCount: number;
   isSuperAdmin?: boolean;
   configuredPlatforms?: string[];
+  /** Mobile drawer state — ignored at sm+ where the sidebar is always in-flow. */
+  open?: boolean;
 }
 
 function SectionLabel({ label }: { label: string }) {
@@ -84,11 +86,17 @@ export function AppSidebar({
   myQueueCount,
   isSuperAdmin,
   configuredPlatforms,
+  open = false,
 }: AppSidebarProps) {
   const extraCustomers = totalCustomers - customers.length;
 
   return (
-    <aside className="h-full w-[220px] shrink-0 bg-[#0a0e2e] border-r border-[#1e2a6e] flex flex-col">
+    <aside
+      className={`w-[220px] shrink-0 bg-[#0a0e2e] border-r border-[#1e2a6e] flex flex-col
+        fixed inset-y-0 left-0 z-40 transition-transform duration-200
+        ${open ? "translate-x-0" : "-translate-x-full"}
+        sm:static sm:h-full sm:translate-x-0 sm:transition-none`}
+    >
         {/* Nav */}
         <nav className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-0.5">
           <SectionLabel label="Live Operations" />

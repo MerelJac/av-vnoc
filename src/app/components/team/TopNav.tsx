@@ -15,13 +15,26 @@ const NAV_LINKS = [
 interface TopNavProps {
   userInitials: string;
   userName: string;
+  onMenuClick?: () => void;
 }
 
-export function TopNav({ userInitials, userName }: TopNavProps) {
+export function TopNav({ userInitials, userName, onMenuClick }: TopNavProps) {
   const pathname = usePathname();
 
   return (
     <header className="shrink-0 z-40 flex items-center h-[52px] bg-[#0f1347] border-b border-[#1e2a6e]/60 px-5">
+      {/* Mobile drawer toggle */}
+      <button
+        type="button"
+        aria-label="Toggle navigation menu"
+        onClick={onMenuClick}
+        className="sm:hidden mr-3 flex flex-col justify-center gap-[3px] w-8 h-8 rounded-md hover:bg-white/5"
+      >
+        <span className="block h-[2px] w-4 mx-auto bg-[#c8d0e0]" />
+        <span className="block h-[2px] w-4 mx-auto bg-[#c8d0e0]" />
+        <span className="block h-[2px] w-4 mx-auto bg-[#c8d0e0]" />
+      </button>
+
       {/* Brand */}
       <div className="flex flex-col min-w-[210px]">
         <span className="text-[15px] font-extrabold tracking-wide text-white font-orbitron leading-none">

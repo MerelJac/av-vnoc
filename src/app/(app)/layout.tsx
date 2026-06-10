@@ -19,18 +19,24 @@ export default async function TeamLayout({ children }: { children: React.ReactNo
       select: { firstName: true, lastName: true },
     }),
     prisma.platformCredential.findMany({
-      where: {
-        OR: [
-          { clientId: { not: null } },
-          { apiKey: { not: null } },
-          { webhookSecret: { not: null } },
-        ],
+      select: {
+        platform: true,
+        clientId: true,
+        apiKey: true,
+        webhookSecret: true,
+        config: true,
       },
-      select: { platform: true },
     }),
   ]);
 
-  const configuredPlatforms = configuredCreds.map((c) => c.platform as string);
+  // A platform is "connected" when it has scalar credentials or, like
+  // Logitech Sync, cert material stored in the config JSON.
+  const configuredPlatforms = configuredCreds
+    .filter((c) => {
+      const config = (c.config as Record<string, unknown>) ?? {};
+      return Boolean(c.clientId || c.apiKey || c.webhookSecret || config.certPem || config.keyPem);
+    })
+    .map((c) => c.platform as string);
 
   const firstName = profile?.firstName ?? "";
   const lastName = profile?.lastName ?? "";

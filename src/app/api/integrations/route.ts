@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Platform, Prisma } from "@prisma/client";
+import { logiConfigSchema } from "@/lib/integrations/logi-config-schema";
+
+// Config keys that must never leave the server: cached OAuth tokens and
+// Logitech mTLS cert material (write-only from the settings form).
+const CONFIG_SECRET_KEYS = new Set(["accessToken", "tokenExpiresAt", "certPem", "keyPem"]);
 
 function maskSecret(value: string | null): string | null {
   if (!value) return null;
@@ -21,10 +26,11 @@ export async function GET(_req: NextRequest) {
   const masked = credentials.map((c) => {
     const rawConfig = (c.config as Record<string, unknown>) ?? {};
     const safeConfig = Object.fromEntries(
-      Object.entries(rawConfig).filter(
-        ([k]) => k !== "accessToken" && k !== "tokenExpiresAt",
-      ),
+      Object.entries(rawConfig).filter(([k]) => !CONFIG_SECRET_KEYS.has(k)),
     );
+    if (rawConfig.certPem || rawConfig.keyPem) {
+      safeConfig.hasCert = true;
+    }
 
     return {
       ...c,
@@ -72,16 +78,37 @@ export async function PUT(req: NextRequest) {
   if ("webhookSecret" in body) updateData.webhookSecret = body.webhookSecret ?? null;
   if (body.config !== undefined) updateData.config = body.config;
 
-  // If credentials are being rotated, invalidate any cached access token
-  if ("clientId" in updateData || "clientSecret" in updateData) {
-    // Read existing config to preserve other fields (like tenantId)
+  const rotatingCreds = "clientId" in updateData || "clientSecret" in updateData;
+  const isLogiConfigUpdate =
+    platform === Platform.LOGITECH_SYNC && body.config !== undefined;
+
+  if (rotatingCreds || isLogiConfigUpdate) {
+    // Read existing config to preserve other fields (like tenantId / stored certs)
     const existing = await prisma.platformCredential.findUnique({
       where: { platform },
       select: { config: true },
     });
     const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
+    // Rotated credentials invalidate any cached access token
     const { accessToken: _a, tokenExpiresAt: _t, ...remainingConfig } = existingConfig;
-    updateData.config = remainingConfig as Record<string, unknown>;
+
+    if (isLogiConfigUpdate) {
+      // Blank/omitted write-only fields (certPem/keyPem) keep their stored values
+      const incoming = Object.fromEntries(
+        Object.entries(body.config ?? {}).filter(
+          ([, v]) => v !== "" && v !== null && v !== undefined,
+        ),
+      );
+      const parsed = logiConfigSchema.safeParse({ ...remainingConfig, ...incoming });
+      if (!parsed.success) {
+        const message = parsed.error.issues[0]?.message ?? "Invalid Logitech Sync config";
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+      updateData.config = parsed.data;
+    } else {
+      // Preserve any config fields sent alongside the rotation
+      updateData.config = { ...remainingConfig, ...(body.config ?? {}) };
+    }
   }
 
   const { config: configValue, ...scalarFields } = updateData;

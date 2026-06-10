@@ -212,4 +212,139 @@ describe("PUT /api/integrations", () => {
     expect(savedConfig).not.toHaveProperty("tokenExpiresAt");
     expect(savedConfig).toHaveProperty("tenantId", "t-uuid");
   });
+
+  it("does not clobber config sent alongside rotated credentials", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindUnique.mockResolvedValueOnce({
+      config: { tenantId: "old-tenant", accessToken: "stale", tokenExpiresAt: 1 },
+    } as never);
+    mockUpsert.mockResolvedValueOnce({} as never);
+
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({
+        platform: "POLY_LENS",
+        clientSecret: "rotated",
+        config: { tenantId: "new-tenant" },
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(200);
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as { update: { config?: Record<string, unknown> } };
+    expect(upsertCall.update.config).toMatchObject({ tenantId: "new-tenant" });
+    expect(upsertCall.update.config).not.toHaveProperty("accessToken");
+  });
+});
+
+describe("GET /api/integrations — Logitech Sync cert material", () => {
+  it("strips keyPem/certPem from config and reports hasCert instead", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindMany.mockResolvedValueOnce([
+      {
+        id: "cred-3",
+        platform: "LOGITECH_SYNC" as never,
+        clientId: null,
+        clientSecret: null,
+        apiKey: null,
+        webhookSecret: null,
+        config: {
+          orgId: "org-1",
+          apiServer: "https://api.sync.logitech.com/v1",
+          certPem: "-----BEGIN CERTIFICATE-----abc",
+          keyPem: "-----BEGIN PRIVATE KEY-----xyz",
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const req = new NextRequest("http://localhost/api/integrations");
+    const res = await GET(req);
+    const body = (await res.json()) as { data: Array<{ config: Record<string, unknown> }> };
+
+    expect(res.status).toBe(200);
+    expect(body.data[0].config).not.toHaveProperty("keyPem");
+    expect(body.data[0].config).not.toHaveProperty("certPem");
+    expect(body.data[0].config).toMatchObject({
+      orgId: "org-1",
+      apiServer: "https://api.sync.logitech.com/v1",
+      hasCert: true,
+    });
+  });
+});
+
+describe("PUT /api/integrations — LOGITECH_SYNC config validation", () => {
+  it("accepts full cert config and persists it (with defaulted apiServer)", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindUnique.mockResolvedValueOnce(null);
+    mockUpsert.mockResolvedValueOnce({} as never);
+
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({
+        platform: "LOGITECH_SYNC",
+        config: { orgId: "org-1", certPem: "CERT", keyPem: "KEY" },
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(200);
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as { update: { config?: Record<string, unknown> } };
+    expect(upsertCall.update.config).toMatchObject({
+      orgId: "org-1",
+      certPem: "CERT",
+      keyPem: "KEY",
+      apiServer: expect.stringContaining("api.sync.logitech.com"),
+    });
+  });
+
+  it("rejects incomplete cert material with 400", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindUnique.mockResolvedValueOnce(null);
+
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({
+        platform: "LOGITECH_SYNC",
+        config: { orgId: "org-1" },
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(400);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it("preserves the stored key when the form omits or blanks write-only fields", async () => {
+    mockSession.mockResolvedValueOnce({ user: { isSuperAdmin: true } } as never);
+    mockFindUnique.mockResolvedValueOnce({
+      config: { orgId: "org-1", certPem: "OLD-CERT", keyPem: "OLD-KEY" },
+    } as never);
+    mockUpsert.mockResolvedValueOnce({} as never);
+
+    const req = new NextRequest("http://localhost/api/integrations", {
+      method: "PUT",
+      body: JSON.stringify({
+        platform: "LOGITECH_SYNC",
+        config: { orgId: "org-2", certPem: "", keyPem: "" },
+      }),
+      headers: { "content-type": "application/json" },
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(200);
+
+    const upsertCall = mockUpsert.mock.calls[0][0] as { update: { config?: Record<string, unknown> } };
+    expect(upsertCall.update.config).toMatchObject({
+      orgId: "org-2",
+      certPem: "OLD-CERT",
+      keyPem: "OLD-KEY",
+    });
+  });
 });

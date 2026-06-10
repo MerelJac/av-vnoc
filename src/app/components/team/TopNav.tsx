@@ -9,7 +9,7 @@ const NAV_LINKS = [
   { label: "Rooms", href: "/rooms" },
   { label: "Devices", href: "/devices" },
   { label: "Customers", href: "/customers" },
-  { label: "Reports", href: null },
+  { label: "Reports", href: "/reports" },
 ] as const;
 
 interface TopNavProps {

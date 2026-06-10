@@ -37,9 +37,8 @@ export async function POST(req: Request) {
 
   try {
     await sendForgotPasswordEmail(user.email, resetUrl);
-    console.error("Sent forgot-password email", user.email);
   } catch (err) {
-    console.error("❌ Error sending forgot-password email:", err);
+    console.error("Error sending forgot-password email:", err);
   }
 
   return NextResponse.json({ success: true });

@@ -8,6 +8,15 @@ import { OrgRole } from "@prisma/client";
 import { sendWelcomeEmail } from "@/lib/email-templates/welcomeEmail";
 
 export async function GET() {
+  const session = await getServerSession(authOptions);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Invite tokens grant account access — only super-admins may list them.
+  if (!session.user?.isSuperAdmin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const invites = await prisma.invite.findMany({
     where: { accepted: false, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },

@@ -33,6 +33,59 @@ export function buildYmcsHeaders(authorization: string): YmcsHeaders {
   };
 }
 
+// YMCS docs suggest a 30 s minimum delay between retries, but serverless
+// route timeouts make that impractical — we cap honored Retry-After at 25 s
+// and use 1 s / 4 s exponential backoff otherwise.
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+const MAX_RETRIES = 2; // 3 total attempts (1 initial + 2 retries)
+const BACKOFF_DELAYS_MS = [1000, 4000] as const;
+const JITTER_FACTOR = 0.2; // ±20%
+const MAX_RETRY_AFTER_S = 25;
+
+function withJitter(ms: number): number {
+  const spread = ms * JITTER_FACTOR;
+  return ms + (Math.random() * 2 - 1) * spread;
+}
+
+function retryDelayMs(attempt: number, retryAfterHeader: string | null): number {
+  if (retryAfterHeader !== null) {
+    const seconds = parseInt(retryAfterHeader, 10);
+    if (!isNaN(seconds) && seconds >= 0 && seconds <= MAX_RETRY_AFTER_S) {
+      return seconds * 1000;
+    }
+  }
+  const base = BACKOFF_DELAYS_MS[attempt] ?? BACKOFF_DELAYS_MS[BACKOFF_DELAYS_MS.length - 1];
+  return withJitter(base);
+}
+
+async function fetchWithRetry(
+  doFetch: () => Promise<Response>,
+  errorMessage: (status: number) => string
+): Promise<Response> {
+  let lastRes: Response | null = null;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await doFetch();
+
+    if (res.status !== 429) {
+      return res;
+    }
+
+    lastRes = res;
+
+    if (attempt < MAX_RETRIES) {
+      const retryAfter = res.headers.get("retry-after");
+      await sleep(retryDelayMs(attempt, retryAfter));
+    }
+  }
+
+  // All attempts exhausted on 429 — consume body and throw
+  const body = await (lastRes as Response).text();
+  throw new YmcsApiError(errorMessage((lastRes as Response).status), (lastRes as Response).status, body);
+}
+
 export async function acquireYmcsToken(
   baseUrl: string,
   clientId: string,
@@ -40,11 +93,15 @@ export async function acquireYmcsToken(
 ): Promise<YmcsTokenResponse> {
   const credential = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
-  const res = await fetch(`${baseUrl}/v2/token`, {
-    method: "POST",
-    headers: buildYmcsHeaders(`Basic ${credential}`),
-    body: JSON.stringify({ grant_type: "client_credentials" }),
-  });
+  const res = await fetchWithRetry(
+    () =>
+      fetch(`${baseUrl}/v2/token`, {
+        method: "POST",
+        headers: buildYmcsHeaders(`Basic ${credential}`),
+        body: JSON.stringify({ grant_type: "client_credentials" }),
+      }),
+    (status) => `YMCS token request failed: ${status}`
+  );
 
   if (!res.ok) {
     const body = await res.text();
@@ -60,11 +117,15 @@ export async function ymcsPost<T>(
   token: string,
   body: unknown
 ): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: buildYmcsHeaders(`Bearer ${token}`),
-    body: JSON.stringify(body),
-  });
+  const res = await fetchWithRetry(
+    () =>
+      fetch(`${baseUrl}${path}`, {
+        method: "POST",
+        headers: buildYmcsHeaders(`Bearer ${token}`),
+        body: JSON.stringify(body),
+      }),
+    (status) => `YMCS POST ${path} failed: ${status}`
+  );
 
   if (!res.ok) {
     const text = await res.text();
@@ -79,10 +140,14 @@ export async function ymcsGet<T>(
   path: string,
   token: string
 ): Promise<T> {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: "GET",
-    headers: buildYmcsHeaders(`Bearer ${token}`),
-  });
+  const res = await fetchWithRetry(
+    () =>
+      fetch(`${baseUrl}${path}`, {
+        method: "GET",
+        headers: buildYmcsHeaders(`Bearer ${token}`),
+      }),
+    (status) => `YMCS GET ${path} failed: ${status}`
+  );
 
   if (!res.ok) {
     const text = await res.text();

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   buildYmcsHeaders,
   acquireYmcsToken,
@@ -93,14 +93,21 @@ describe("ymcsPost", () => {
     expect(JSON.parse(init.body as string)).toEqual({ skip: 0, limit: 10 });
   });
 
-  it("throws YmcsApiError on 429", async () => {
+  it("throws YmcsApiError on 429 (all retries exhausted)", async () => {
+    vi.useFakeTimers();
+    // mockResolvedValue (no "Once") so all 3 retry attempts get a 429
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValueOnce(new Response("Too Many Requests", { status: 429 }))
+      vi.fn().mockResolvedValue(new Response("Too Many Requests", { status: 429 }))
     );
-    await expect(
-      ymcsPost(BASE_URL, "/v2/dm/listDevices", "tok", {})
-    ).rejects.toThrow(YmcsApiError);
+    let capturedError: YmcsApiError | undefined;
+    const promise = ymcsPost(BASE_URL, "/v2/dm/listDevices", "tok", {}).catch(
+      (e: unknown) => { capturedError = e as YmcsApiError; }
+    );
+    await vi.advanceTimersByTimeAsync(20_000);
+    await promise;
+    vi.useRealTimers();
+    expect(capturedError).toBeInstanceOf(YmcsApiError);
   });
 });
 
@@ -127,5 +134,105 @@ describe("ymcsGet", () => {
     await expect(
       ymcsGet(BASE_URL, "/v2/dm/statistics/deviceCount", "tok")
     ).rejects.toThrow(YmcsApiError);
+  });
+});
+
+describe("429 retry-with-backoff", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("ymcsPost retries after 429 then succeeds — fetch called 3 times", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("Too Many Requests", { status: 429 }))
+      .mockResolvedValueOnce(new Response("Too Many Requests", { status: 429 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const promise = ymcsPost<{ data: unknown[] }>(BASE_URL, "/v2/dm/listDevices", "tok", {});
+
+    // advance past both retry delays
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    const result = await promise;
+    expect(result).toEqual({ data: [] });
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("ymcsPost honors Retry-After header (≤25 s) before retrying", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response("Too Many Requests", {
+          status: 429,
+          headers: { "retry-after": "5" },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
+      );
+    vi.stubGlobal("fetch", mockFetch);
+
+    const promise = ymcsPost<{ ok: boolean }>(BASE_URL, "/v2/dm/listDevices", "tok", {});
+
+    // 4 999 ms should not yet have resolved (needs ≥5 000 ms)
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    const result = await promise;
+    expect(result).toEqual({ ok: true });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("ymcsPost gives up after 3 attempts and throws YmcsApiError with status 429", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValue(new Response("Too Many Requests", { status: 429 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    let capturedError: YmcsApiError | undefined;
+    const promise = ymcsPost(BASE_URL, "/v2/dm/listDevices", "tok", {}).catch(
+      (e: unknown) => { capturedError = e as YmcsApiError; }
+    );
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    await promise;
+
+    expect(capturedError).toBeInstanceOf(YmcsApiError);
+    expect(capturedError?.status).toBe(429);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it("ymcsPost does not retry on 500", async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("Internal Server Error", { status: 500 }));
+    vi.stubGlobal("fetch", mockFetch);
+
+    let capturedError: YmcsApiError | undefined;
+    const promise = ymcsPost(BASE_URL, "/v2/dm/listDevices", "tok", {}).catch(
+      (e: unknown) => { capturedError = e as YmcsApiError; }
+    );
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await promise;
+
+    expect(capturedError).toBeInstanceOf(YmcsApiError);
+    expect(capturedError?.status).toBe(500);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

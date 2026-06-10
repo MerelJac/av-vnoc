@@ -4,6 +4,9 @@ import { createYealinkAdapter } from "@/lib/integrations/yealink";
 import { processAlert } from "@/lib/correlation";
 import { emitSseEvent } from "@/lib/sse-bus";
 import { AlertSeverity } from "@prisma/client";
+import { checkRateLimit, clientIpFrom } from "@/lib/rate-limit";
+
+const RATE_LIMIT = { limit: 120, windowMs: 60 * 1000 };
 
 interface YmcsEventData {
   id: string;
@@ -34,6 +37,17 @@ function isYmcsWebhookBody(value: unknown): value is YmcsWebhookBody {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const { allowed, retryAfterSeconds } = checkRateLimit(
+    `yealink-webhook:${clientIpFrom(req)}`,
+    RATE_LIMIT,
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+    );
+  }
+
   const rawBody = await req.text();
   const authHeader = req.headers.get("authorization") ?? "";
 

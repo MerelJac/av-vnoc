@@ -2,8 +2,22 @@ import { sendForgotPasswordEmail } from "@/lib/email-templates/forgotPassword";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { checkRateLimit, clientIpFrom } from "@/lib/rate-limit";
+
+const RATE_LIMIT = { limit: 5, windowMs: 15 * 60 * 1000 };
 
 export async function POST(req: Request) {
+  const { allowed, retryAfterSeconds } = checkRateLimit(
+    `forgot-password:${clientIpFrom(req)}`,
+    RATE_LIMIT,
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+    );
+  }
+
   const { email } = await req.json();
 
   if (!email) {

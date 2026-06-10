@@ -31,10 +31,17 @@ vi.mock("@/lib/sse-bus", () => ({
   emitSseEvent: vi.fn(),
 }));
 
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: vi.fn(() => ({ allowed: true, retryAfterSeconds: 0 })),
+  clientIpFrom: vi.fn(() => "1.2.3.4"),
+  resetRateLimits: vi.fn(),
+}));
+
 import { createYealinkAdapter } from "@/lib/integrations/yealink";
 import { prisma } from "@/lib/prisma";
 import { processAlert } from "@/lib/correlation";
 import { emitSseEvent } from "@/lib/sse-bus";
+import { checkRateLimit, resetRateLimits } from "@/lib/rate-limit";
 
 const mockCreateAdapter = vi.mocked(createYealinkAdapter);
 const mockProcessAlert = vi.mocked(processAlert);
@@ -45,6 +52,7 @@ const mockFindAlert = vi.mocked(prisma.alert.findFirst);
 const mockUpdateAlert = vi.mocked(prisma.alert.update);
 const mockCreateLog = vi.mocked(prisma.activityLog.create);
 const mockEmitSse = vi.mocked(emitSseEvent);
+const mockCheckRateLimit = vi.mocked(checkRateLimit);
 
 const VALID_BODY = {
   events: [
@@ -84,15 +92,29 @@ const MOCK_ADAPTER = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetRateLimits();
   mockCreateAdapter.mockResolvedValue(MOCK_ADAPTER as never);
   mockFindEvent.mockResolvedValue(null);
   mockCreateEvent.mockResolvedValue({ id: "db-event-1" } as never);
   mockUpdateEvent.mockResolvedValue({} as never);
   mockCreateLog.mockResolvedValue({} as never);
   mockProcessAlert.mockResolvedValue({ action: "created", alertId: "a1", ticketId: "t1" });
+  // Default: rate limit passes
+  mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterSeconds: 0 });
 });
 
 describe("POST /api/webhooks/yealink", () => {
+  it("returns 429 when rate limit is exceeded", async () => {
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 10 });
+    const req = makeRequest(VALID_BODY);
+    const res = await POST(req);
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("10");
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("Too many requests");
+    expect(mockCreateAdapter).not.toHaveBeenCalled();
+  });
+
   it("returns 401 when authorization token is wrong", async () => {
     const req = makeRequest(VALID_BODY, "wrong-token");
     const res = await POST(req);

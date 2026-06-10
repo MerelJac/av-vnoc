@@ -2,8 +2,22 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, clientIpFrom } from "@/lib/rate-limit";
+
+const RATE_LIMIT = { limit: 5, windowMs: 15 * 60 * 1000 };
 
 export async function POST(req: Request) {
+  const { allowed, retryAfterSeconds } = checkRateLimit(
+    `reset-password:${clientIpFrom(req)}`,
+    RATE_LIMIT,
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+    );
+  }
+
   const { token, password } = await req.json();
 
   if (!token || !password) {

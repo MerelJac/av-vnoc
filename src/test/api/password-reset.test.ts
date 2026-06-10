@@ -11,18 +11,25 @@ vi.mock("bcryptjs", () => ({ default: { hash: vi.fn() } }));
 vi.mock("@/lib/email-templates/forgotPassword", () => ({
   sendForgotPasswordEmail: vi.fn(),
 }));
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: vi.fn(() => ({ allowed: true, retryAfterSeconds: 0 })),
+  clientIpFrom: vi.fn(() => "1.2.3.4"),
+  resetRateLimits: vi.fn(),
+}));
 
 import { POST as forgotPassword } from "@/app/api/auth/forgot-password/route";
 import { POST as resetPassword } from "@/app/api/auth/reset-password/route";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { sendForgotPasswordEmail } from "@/lib/email-templates/forgotPassword";
+import { checkRateLimit, resetRateLimits } from "@/lib/rate-limit";
 
 const mockUserFind = vi.mocked(prisma.user.findUnique);
 const mockTokenCreate = vi.mocked(prisma.passwordResetToken.create);
 const mockTokenFind = vi.mocked(prisma.passwordResetToken.findUnique);
 const mockSendEmail = vi.mocked(sendForgotPasswordEmail);
 const mockTransaction = vi.mocked(prisma.$transaction);
+const mockCheckRateLimit = vi.mocked(checkRateLimit);
 
 function jsonReq(url: string, body: unknown): Request {
   return new Request(url, {
@@ -34,10 +41,25 @@ function jsonReq(url: string, body: unknown): Request {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetRateLimits();
   vi.mocked(bcrypt.hash).mockResolvedValue("hashed-pw" as never);
+  // Default: rate limit passes
+  mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterSeconds: 0 });
 });
 
 describe("POST /api/auth/forgot-password", () => {
+  it("returns 429 when rate limit is exceeded", async () => {
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 60 });
+    const res = await forgotPassword(
+      jsonReq("http://localhost/api/auth/forgot-password", { email: "x@y.com" })
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("60");
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("Too many requests");
+    expect(mockUserFind).not.toHaveBeenCalled();
+  });
+
   it("returns 200 for an unknown email without creating a token (no enumeration)", async () => {
     mockUserFind.mockResolvedValueOnce(null);
 
@@ -73,6 +95,18 @@ describe("POST /api/auth/forgot-password", () => {
 });
 
 describe("POST /api/auth/reset-password", () => {
+  it("returns 429 when rate limit is exceeded", async () => {
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 45 });
+    const res = await resetPassword(
+      jsonReq("http://localhost/api/auth/reset-password", { token: "t", password: "p" })
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("45");
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("Too many requests");
+    expect(mockTokenFind).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when token or password is missing", async () => {
     const res = await resetPassword(
       jsonReq("http://localhost/api/auth/reset-password", { token: "only-token" })

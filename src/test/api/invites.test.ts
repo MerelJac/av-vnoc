@@ -13,6 +13,11 @@ vi.mock("@/lib/prisma", () => ({
 }));
 vi.mock("bcryptjs", () => ({ default: { hash: vi.fn() } }));
 vi.mock("@/lib/email-templates/welcomeEmail", () => ({ sendWelcomeEmail: vi.fn() }));
+vi.mock("@/lib/rate-limit", () => ({
+  checkRateLimit: vi.fn(() => ({ allowed: true, retryAfterSeconds: 0 })),
+  clientIpFrom: vi.fn(() => "1.2.3.4"),
+  resetRateLimits: vi.fn(),
+}));
 
 import { GET, POST } from "@/app/api/invites/route";
 import { POST as acceptInvite } from "@/app/api/invites/accept/route";
@@ -20,12 +25,14 @@ import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { sendWelcomeEmail } from "@/lib/email-templates/welcomeEmail";
+import { checkRateLimit, resetRateLimits } from "@/lib/rate-limit";
 
 const mockSession = vi.mocked(getServerSession);
 const mockInviteFindMany = vi.mocked(prisma.invite.findMany);
 const mockInviteFindUnique = vi.mocked(prisma.invite.findUnique);
 const mockUserFindUnique = vi.mocked(prisma.user.findUnique);
 const mockTransaction = vi.mocked(prisma.$transaction);
+const mockCheckRateLimit = vi.mocked(checkRateLimit);
 
 const superAdmin = { user: { id: "admin-1", isSuperAdmin: true } };
 const regular = { user: { id: "u-1", isSuperAdmin: false } };
@@ -48,7 +55,10 @@ const FULL_INVITE_BODY = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetRateLimits();
   vi.mocked(bcrypt.hash).mockResolvedValue("hashed-pw" as never);
+  // Default: rate limit passes
+  mockCheckRateLimit.mockReturnValue({ allowed: true, retryAfterSeconds: 0 });
 });
 
 describe("GET /api/invites", () => {
@@ -130,6 +140,18 @@ describe("POST /api/invites/accept", () => {
     accepted: false,
     expiresAt: new Date(Date.now() + 86_400_000),
   };
+
+  it("returns 429 when rate limit is exceeded", async () => {
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 30 });
+    const res = await acceptInvite(
+      postReq("http://localhost/api/invites/accept", { token: "tok", password: "longenough" })
+    );
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    const body = await res.json() as { error: string };
+    expect(body.error).toBe("Too many requests");
+    expect(mockInviteFindUnique).not.toHaveBeenCalled();
+  });
 
   it("returns 400 when token or password is missing", async () => {
     const res = await acceptInvite(

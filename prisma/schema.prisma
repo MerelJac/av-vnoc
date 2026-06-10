@@ -232,6 +232,7 @@ model Device {
   @@unique([platform, platformId])
   @@index([roomId])
   @@index([platform])
+  @@index([platform, macAddress])
 }
 
 model WebhookEvent {

@@ -132,6 +132,38 @@ describe("syncDevices", () => {
     expect(devices[1]).toMatchObject({ status: "offline" });
     expect(devices[2]).toMatchObject({ status: "unknown" }); // pending → unknown
   });
+
+  it("stores MAC addresses lowercased so correlation's MAC fallback matches", async () => {
+    mockGetCredential.mockResolvedValue(VALID_CRED);
+    mockAcquireToken.mockResolvedValueOnce({
+      access_token: "tok",
+      token_type: "bearer",
+      expires_in: 86400,
+    });
+
+    mockYmcsPost.mockResolvedValueOnce({
+      skip: 0,
+      limit: 100,
+      total: 1,
+      data: [
+        {
+          id: "dev-upper",
+          mac: "001565AABBCC",
+          sn: "SN010",
+          name: "Phone Upper",
+          modelId: "model-a",
+          siteId: "site-1",
+          programVersion: "70.83.0.68",
+          deviceStatus: "online",
+        },
+      ],
+    });
+
+    const adapter = await createYealinkAdapter();
+    const devices = await adapter.syncDevices();
+
+    expect(devices[0].macAddress).toBe("001565aabbcc");
+  });
 });
 
 describe("fetchRecentAlerts", () => {

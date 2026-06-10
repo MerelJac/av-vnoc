@@ -133,7 +133,8 @@ export async function createYealinkAdapter(): Promise<PlatformAdapter> {
         name: d.name,
         model: d.modelId || undefined,
         firmware: d.programVersion || undefined,
-        macAddress: d.mac || undefined,
+        // Lowercased so correlation.ts can MAC-match alarms with exact equality
+        macAddress: d.mac ? d.mac.toLowerCase() : undefined,
         status: toDeviceStatus(d.deviceStatus),
         rawPayload: d,
       }));

@@ -15,6 +15,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     device: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     ticket: {
       create: vi.fn(),
@@ -261,6 +262,7 @@ describe('processAlert - suppression for unassigned devices', () => {
   it('suppresses (no alert/ticket/SSE) when the device is unknown', async () => {
     vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
     vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.device.findFirst).mockResolvedValue(null)
 
     const result = await processAlert(makeAlert())
 
@@ -279,5 +281,121 @@ describe('processAlert - suppression for unassigned devices', () => {
     expect(result.action).toBe('suppressed')
     expect(prisma.alert.create).not.toHaveBeenCalled()
     expect(prisma.ticket.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('processAlert - MAC-address device fallback (Yealink YMCS)', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  // YMCS alarms carry the device MAC, not the YMCS UUID that syncDevices
+  // stores as platformId — so the platform_platformId lookup misses.
+  const makeYmcsAlert = (overrides = {}) =>
+    makeAlert({
+      platform: 'YEALINK_YMCS' as Platform,
+      platformAlertId: 'alarm-001',
+      platformDeviceId: '001565AABBCC',
+      title: 'Offline: SIP-T54S (001565AABBCC)',
+      ...overrides,
+    })
+
+  it('falls back to MAC lookup and creates the alert when platformId lookup misses', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.device.findFirst).mockResolvedValue({
+      id: 'device-mac-1',
+      roomId: 'room-1',
+      room: { id: 'room-1', siteId: 'site-1', site: { id: 'site-1', customerId: 'customer-1', customer: { id: 'customer-1', name: 'Acme' } } },
+    } as any)
+    vi.mocked(prisma.alert.create).mockResolvedValue({ id: 'alert-1', roomId: 'room-1', title: 'Offline: SIP-T54S (001565AABBCC)', severity: 'HIGH', description: null } as any)
+    vi.mocked(prisma.alert.count).mockResolvedValue(0)
+    vi.mocked(prisma.alertGroup.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.alertGroup.create).mockResolvedValue({ id: 'group-1' } as any)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.ticket.create).mockResolvedValue({ id: 'ticket-1', title: 'Offline', priority: 'P2' } as any)
+    vi.mocked(prisma.activityLog.create).mockResolvedValue({} as any)
+
+    const result = await processAlert(makeYmcsAlert())
+
+    expect(result.action).toBe('created')
+
+    // Fallback queries by platform + lowercased MAC, deterministically ordered
+    expect(prisma.device.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          platform: 'YEALINK_YMCS',
+          macAddress: '001565aabbcc',
+        },
+        orderBy: { createdAt: 'asc' },
+      })
+    )
+
+    // Alert is linked to the device found via MAC
+    const createCall = vi.mocked(prisma.alert.create).mock.calls[0][0]
+    expect(createCall.data.deviceId).toBe('device-mac-1')
+    expect(createCall.data.roomId).toBe('room-1')
+  })
+
+  it('does not query by MAC when the platformId lookup succeeds', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue({
+      id: 'device-1',
+      roomId: 'room-1',
+      room: { id: 'room-1', siteId: 'site-1', site: { id: 'site-1', customerId: 'customer-1', customer: { id: 'customer-1', name: 'Acme' } } },
+    } as any)
+    vi.mocked(prisma.alert.create).mockResolvedValue({ id: 'alert-1', roomId: 'room-1', title: 'Test', severity: 'HIGH', description: null } as any)
+    vi.mocked(prisma.alert.count).mockResolvedValue(0)
+    vi.mocked(prisma.alertGroup.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.alertGroup.create).mockResolvedValue({ id: 'group-1' } as any)
+    vi.mocked(prisma.alert.update).mockResolvedValue({} as any)
+    vi.mocked(prisma.ticket.create).mockResolvedValue({ id: 'ticket-1', title: 'Test', priority: 'P2' } as any)
+    vi.mocked(prisma.activityLog.create).mockResolvedValue({} as any)
+
+    await processAlert(makeAlert())
+
+    expect(prisma.device.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('suppresses when neither platformId nor MAC matches a device', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.device.findFirst).mockResolvedValue(null)
+
+    const result = await processAlert(makeYmcsAlert())
+
+    expect(result.action).toBe('suppressed')
+    expect(prisma.alert.create).not.toHaveBeenCalled()
+    expect(prisma.ticket.create).not.toHaveBeenCalled()
+  })
+
+  it('suppresses when the MAC fallback finds a device not assigned to a room', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.device.findFirst).mockResolvedValue({ id: 'device-mac-1', roomId: null, room: null } as any)
+
+    const result = await processAlert(makeYmcsAlert())
+
+    expect(result.action).toBe('suppressed')
+    expect(prisma.alert.create).not.toHaveBeenCalled()
+  })
+
+  it('does not run the MAC fallback for platforms that identify devices by platformId', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+    vi.mocked(prisma.device.findUnique).mockResolvedValue(null)
+    vi.mocked(prisma.device.findFirst).mockResolvedValue(null)
+
+    const result = await processAlert(makeAlert()) // POLY_LENS
+
+    expect(result.action).toBe('suppressed')
+    expect(prisma.device.findFirst).not.toHaveBeenCalled()
+  })
+
+  it('skips all device lookups when platformDeviceId is empty', async () => {
+    vi.mocked(prisma.alert.findFirst).mockResolvedValue(null)
+
+    const result = await processAlert(makeYmcsAlert({ platformDeviceId: '' }))
+
+    expect(result.action).toBe('suppressed')
+    expect(prisma.device.findUnique).not.toHaveBeenCalled()
+    expect(prisma.device.findFirst).not.toHaveBeenCalled()
   })
 })

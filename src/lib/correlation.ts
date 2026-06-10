@@ -18,6 +18,45 @@ type DeviceWithRoom = Prisma.DeviceGetPayload<{
   include: { room: { include: { site: { include: { customer: true } } } } };
 }>;
 
+const deviceWithRoomInclude = {
+  room: { include: { site: { include: { customer: true } } } },
+} as const;
+
+// Platforms whose alerts identify devices by MAC address instead of the
+// vendor device ID stored as Device.platformId (YMCS alarms only carry MAC).
+const MAC_FALLBACK_PLATFORMS: ReadonlySet<Platform> = new Set(["YEALINK_YMCS"]);
+
+async function findDeviceForAlert(
+  normalized: NormalizedAlert
+): Promise<DeviceWithRoom | null> {
+  if (!normalized.platformDeviceId) return null;
+
+  const byPlatformId = await prisma.device.findUnique({
+    where: {
+      platform_platformId: {
+        platform: normalized.platform,
+        platformId: normalized.platformDeviceId,
+      },
+    },
+    include: deviceWithRoomInclude,
+  });
+
+  if (byPlatformId) return byPlatformId;
+  if (!MAC_FALLBACK_PLATFORMS.has(normalized.platform)) return null;
+
+  // MACs are stored lowercase by sync (and compared lowercase here) so the
+  // exact-equality lookup can use the [platform, macAddress] index. Oldest
+  // device wins when duplicates share a MAC (re-provisioned hardware).
+  return prisma.device.findFirst({
+    where: {
+      platform: normalized.platform,
+      macAddress: normalized.platformDeviceId.toLowerCase(),
+    },
+    orderBy: { createdAt: "asc" },
+    include: deviceWithRoomInclude,
+  });
+}
+
 async function createTicketForAlert(
   alert: { id: string; title: string; severity: AlertSeverity; description: string | null },
   platform: Platform,
@@ -146,16 +185,8 @@ export async function processAlert(
     return { action: "deduped", alertId: existing.id };
   }
 
-  // Device lookup
-  const device = await prisma.device.findUnique({
-    where: {
-      platform_platformId: {
-        platform: normalized.platform,
-        platformId: normalized.platformDeviceId,
-      },
-    },
-    include: { room: { include: { site: { include: { customer: true } } } } },
-  });
+  // Device lookup — by platform+platformId, with MAC-address fallback
+  const device = await findDeviceForAlert(normalized);
 
   // Suppress alerts from devices that aren't assigned to a room. Unknown devices
   // (not in our inventory) and unassigned devices are noise we don't surface as
@@ -168,7 +199,7 @@ export async function processAlert(
   const alert = await persistAlert(normalized, device.id, device.roomId);
 
   // Pass 3: Pattern grouping — call assignAlertGroup
-  await assignAlertGroup(alert, device as DeviceWithRoom | null);
+  await assignAlertGroup(alert, device);
 
   // Ticket auto-creation
   const customerId = device?.room?.site?.customerId ?? null;

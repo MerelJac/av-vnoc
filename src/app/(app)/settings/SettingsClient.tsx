@@ -41,6 +41,7 @@ const PLATFORMS = [
   {
     id: "LOGITECH_SYNC",
     label: "Logitech Sync",
+    note: "Generate the certificate in Sync Portal → Settings → Sync Cloud API. A Sync account supports at most two certificates at a time — revoke an old one there if generation fails.",
     credFields: [],
     configFields: [
       { key: "orgId", label: "Org ID (from the Sync Portal)", type: "text" as const },
@@ -162,6 +163,9 @@ export function SettingsClient() {
           className="rounded-xl border border-gray-200 bg-white shadow-sm p-6 space-y-4"
         >
           <h2 className="text-lg font-semibold text-gray-900">{platform.label}</h2>
+          {"note" in platform && (
+            <p className="text-xs text-gray-500 -mt-2">{platform.note}</p>
+          )}
 
           {platform.credFields.map((field) => (
             <div key={field.key}>

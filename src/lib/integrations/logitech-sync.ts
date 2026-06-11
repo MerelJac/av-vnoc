@@ -2,6 +2,7 @@ import { Platform, AlertSeverity } from "@prisma/client";
 import { NormalizedAlert, NormalizedDevice, PlatformAdapter, DeviceStatus } from "./types";
 import { getCredential } from "./credentials";
 import { createLogiSyncClient, LogiSyncClient } from "./logi-sync-client";
+import { logWarn } from "@/lib/logger";
 
 const DEFAULT_API_SERVER = "https://api.sync.logitech.com/v1";
 
@@ -33,13 +34,52 @@ function toStatus(value: unknown): DeviceStatus {
   return "unknown";
 }
 
-// TODO(verify): confirm the device endpoint path and field names against the
-// Sync Portal OpenAPI spec / a live response. `/devices` + the fields below are
-// the working assumption from the quick-start guide; isolate changes here.
+interface LogiPlace {
+  id?: unknown;
+  name?: unknown;
+  devices?: Array<Record<string, unknown>>;
+}
+
+// Device discovery. `GET /places` is the endpoint verified by the Sync API
+// quick-start guide (spec: docs/superpowers/specs/2026-06-10-logitech-sync-
+// api-verification.md); devices commonly arrive embedded under each place.
+// `/devices` is still attempted as a fallback but its failure is tolerated
+// when places already produced devices.
+// TODO(verify): finalize field names against the Sync Portal OpenAPI spec.
 async function fetchDevicesRaw(client: LogiSyncClient): Promise<Array<Record<string, unknown>>> {
-  await client.get<{ places: unknown[] }>("/places"); // ensures org access; place mapping optional
-  const res = await client.get<{ devices?: Array<Record<string, unknown>> }>("/devices");
-  return res.devices ?? [];
+  const placesRes = await client.get<{ places?: LogiPlace[] }>("/places");
+  const places = placesRes.places ?? [];
+
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const place of places) {
+    for (const device of place.devices ?? []) {
+      const id = String(device.id);
+      if (!byId.has(id)) {
+        byId.set(id, {
+          ...device,
+          __placeName: typeof place.name === "string" ? place.name : undefined,
+        });
+      }
+    }
+  }
+
+  try {
+    const res = await client.get<{ devices?: Array<Record<string, unknown>> }>("/devices");
+    for (const device of res.devices ?? []) {
+      const id = String(device.id);
+      if (!byId.has(id)) byId.set(id, device);
+    }
+  } catch (err) {
+    // Endpoint unverified by the quick-start guide — tolerate its absence
+    // when the places response already carried the device inventory.
+    if (byId.size === 0) throw err;
+    logWarn("integrations:logitech", "/devices endpoint failed; using place-embedded devices", {
+      error: err as Error,
+      placeDevices: byId.size,
+    });
+  }
+
+  return Array.from(byId.values());
 }
 
 export async function createLogiSyncAdapter(): Promise<PlatformAdapter> {

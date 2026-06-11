@@ -63,7 +63,7 @@ Now:
 2. Register the YMCS webhook in the YMCS admin portal → save its verification token in Settings.
 3. Apply the pending DB migration: deploy (Amplify now runs `migrate deploy`) or run `npx prisma migrate deploy` manually.
 4. Redeploy the cron Lambda (script now includes `/api/cron/alerts`) and add a 5-minute EventBridge rule for it — the proposal/spec wants tight polling, current schedule is daily.
-5. Download the Logitech Sync OpenAPI spec from the Sync Portal and the Utelogy U-API docs for Claude.
+5. Download the Logitech Sync OpenAPI spec from the Sync Portal (Settings → Sync Cloud API tab) and the Utelogy U-API docs for Claude. *(Update 2026-06-10: the Sync quick-start guide was fetched and verified — auth/mTLS, base URL, and `/places` are confirmed and the adapter now reads place-embedded devices; the OpenAPI spec is still needed for the device-command/reboot endpoints. See docs/superpowers/specs/2026-06-10-logitech-sync-api-verification.md.)*
 
 Decisions the proposal flags as "need to land early":
 6. ServiceNow instance: net-new tenant vs shared with IT ops (proposal recommends net-new) — gates TODO #9.

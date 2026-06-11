@@ -39,6 +39,15 @@ describe("SettingsClient — Utelogy card", () => {
 });
 
 describe("SettingsClient — Logitech Sync card", () => {
+  it("shows where credentials come from and the two-certificate account limit", () => {
+    render(<SettingsClient />);
+
+    expect(
+      screen.getByText(/Sync Portal → Settings → Sync Cloud API/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/two certificates/i)).toBeInTheDocument();
+  });
+
   it("renders the Logitech Sync section with PEM textareas", () => {
     render(<SettingsClient />);
 

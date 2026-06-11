@@ -69,6 +69,99 @@ describe("syncDevices", () => {
     });
   });
 
+  it("collects devices embedded in the /places response (verified endpoint)", async () => {
+    mockCred.mockResolvedValueOnce(VALID_CRED as never);
+    mockGet
+      .mockResolvedValueOnce({
+        places: [
+          {
+            id: "place-1",
+            name: "Boardroom",
+            devices: [
+              {
+                id: "dev-embedded",
+                name: "Rally Bar",
+                connectionStatus: "online",
+                model: "Rally Bar",
+              },
+            ],
+          },
+          { id: "place-2", name: "Huddle" },
+        ],
+      })
+      .mockResolvedValueOnce({ devices: [] });
+
+    const adapter = await createLogiSyncAdapter();
+    const devices = await adapter.syncDevices();
+
+    expect(devices).toHaveLength(1);
+    expect(devices[0]).toMatchObject({
+      platformId: "dev-embedded",
+      name: "Rally Bar",
+      status: "online",
+    });
+    expect((devices[0].rawPayload as Record<string, unknown>).__placeName).toBe("Boardroom");
+  });
+
+  it("merges /devices results with place-embedded devices, deduped by id", async () => {
+    mockCred.mockResolvedValueOnce(VALID_CRED as never);
+    mockGet
+      .mockResolvedValueOnce({
+        places: [
+          {
+            id: "place-1",
+            name: "Boardroom",
+            devices: [{ id: "dev-1", name: "Rally Bar", connectionStatus: "online" }],
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        devices: [
+          { id: "dev-1", name: "Rally Bar (dup)", connectionStatus: "online" },
+          { id: "dev-2", name: "MeetUp", connectionStatus: "offline" },
+        ],
+      });
+
+    const adapter = await createLogiSyncAdapter();
+    const devices = await adapter.syncDevices();
+
+    expect(devices).toHaveLength(2);
+    expect(devices.map((d) => d.platformId).sort()).toEqual(["dev-1", "dev-2"]);
+    // Place-embedded record wins for duplicates
+    expect(devices.find((d) => d.platformId === "dev-1")?.name).toBe("Rally Bar");
+  });
+
+  it("tolerates a failing /devices endpoint when places already yielded devices", async () => {
+    mockCred.mockResolvedValueOnce(VALID_CRED as never);
+    mockGet
+      .mockResolvedValueOnce({
+        places: [
+          {
+            id: "place-1",
+            name: "Boardroom",
+            devices: [{ id: "dev-1", name: "Rally Bar", connectionStatus: "online" }],
+          },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("Logitech Sync GET /devices failed: 404"));
+
+    const adapter = await createLogiSyncAdapter();
+    const devices = await adapter.syncDevices();
+
+    expect(devices).toHaveLength(1);
+    expect(devices[0].platformId).toBe("dev-1");
+  });
+
+  it("still fails when /devices errors and places had no devices", async () => {
+    mockCred.mockResolvedValueOnce(VALID_CRED as never);
+    mockGet
+      .mockResolvedValueOnce({ places: [{ id: "place-1", name: "Empty" }] })
+      .mockRejectedValueOnce(new Error("Logitech Sync GET /devices failed: 500"));
+
+    const adapter = await createLogiSyncAdapter();
+    await expect(adapter.syncDevices()).rejects.toThrow(/500/);
+  });
+
   it("maps disconnected to offline and unknown values to unknown", async () => {
     mockCred.mockResolvedValueOnce(VALID_CRED as never);
     mockGet.mockResolvedValueOnce({ places: [] }).mockResolvedValueOnce({

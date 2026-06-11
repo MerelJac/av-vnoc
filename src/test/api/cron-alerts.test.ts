@@ -13,6 +13,9 @@ vi.mock("@/lib/correlation", () => ({
   processAlert: vi.fn(),
   runAutoResolveSweep: vi.fn(),
 }));
+vi.mock("@/lib/sla-warnings", () => ({
+  runSlaWarningSweep: vi.fn(),
+}));
 
 import { GET } from "@/app/api/cron/alerts/route";
 import { createPolyLensAdapter } from "@/lib/integrations/poly-lens";
@@ -21,6 +24,7 @@ import { createLogiSyncAdapter } from "@/lib/integrations/logitech-sync";
 import { createUtelogyAdapter } from "@/lib/integrations/utelogy";
 import { getConfig, updateConfig } from "@/lib/integrations/credentials";
 import { processAlert, runAutoResolveSweep } from "@/lib/correlation";
+import { runSlaWarningSweep } from "@/lib/sla-warnings";
 
 const mockPoly = vi.mocked(createPolyLensAdapter);
 const mockYealink = vi.mocked(createYealinkAdapter);
@@ -30,6 +34,7 @@ const mockGetConfig = vi.mocked(getConfig);
 const mockUpdateConfig = vi.mocked(updateConfig);
 const mockProcessAlert = vi.mocked(processAlert);
 const mockSweep = vi.mocked(runAutoResolveSweep);
+const mockSlaSweep = vi.mocked(runSlaWarningSweep);
 
 const CRON_SECRET = "test-cron-secret";
 
@@ -56,6 +61,7 @@ beforeEach(() => {
   mockUpdateConfig.mockResolvedValue(undefined as never);
   mockProcessAlert.mockResolvedValue({ action: "created", alertId: "a1" });
   mockSweep.mockResolvedValue({ resolved: 0 });
+  mockSlaSweep.mockResolvedValue({ warned: 0, errors: [] });
 });
 
 describe("GET /api/cron/alerts", () => {
@@ -121,5 +127,40 @@ describe("GET /api/cron/alerts", () => {
     const body = (await res.json()) as { autoResolved: number };
 
     expect(body.autoResolved).toBe(4);
+  });
+
+  it("runs the SLA warning sweep and includes its result in the response", async () => {
+    mockPoly.mockResolvedValue(makeAdapter([]));
+    mockYealink.mockResolvedValue(makeAdapter([]));
+    mockLogi.mockResolvedValue(makeAdapter([]));
+    mockUtelogy.mockResolvedValue(makeAdapter([]));
+    mockSlaSweep.mockResolvedValue({ warned: 3, errors: ["bad@example.com: SES throttled"] });
+
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`));
+    const body = (await res.json()) as {
+      ok: boolean;
+      slaWarnings: { warned: number; errors: string[] };
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.slaWarnings.warned).toBe(3);
+    expect(body.slaWarnings.errors).toEqual(["bad@example.com: SES throttled"]);
+    expect(mockSlaSweep).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fail the cron when the SLA warning sweep throws", async () => {
+    mockPoly.mockResolvedValue(makeAdapter([]));
+    mockYealink.mockResolvedValue(makeAdapter([]));
+    mockLogi.mockResolvedValue(makeAdapter([]));
+    mockUtelogy.mockResolvedValue(makeAdapter([]));
+    mockSlaSweep.mockRejectedValue(new Error("DB timeout"));
+
+    const res = await GET(makeRequest(`Bearer ${CRON_SECRET}`));
+    const body = (await res.json()) as { ok: boolean };
+
+    // Cron must still return 200
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
   });
 });

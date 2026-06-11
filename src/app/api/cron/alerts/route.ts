@@ -7,6 +7,7 @@ import { createUtelogyAdapter } from "@/lib/integrations/utelogy";
 import { PlatformAdapter } from "@/lib/integrations/types";
 import { getConfig, updateConfig } from "@/lib/integrations/credentials";
 import { processAlert, runAutoResolveSweep } from "@/lib/correlation";
+import { runSlaWarningSweep } from "@/lib/sla-warnings";
 import { logError } from "@/lib/logger";
 
 interface PollResult {
@@ -79,5 +80,12 @@ export async function GET(req: NextRequest) {
     // Sweep failure should not fail the whole cron run
   }
 
-  return NextResponse.json({ ok: true, results, autoResolved });
+  let slaWarnings: { warned: number; errors: string[] } = { warned: 0, errors: [] };
+  try {
+    slaWarnings = await runSlaWarningSweep();
+  } catch (err) {
+    logError("cron:alerts", "SLA warning sweep failed", { error: err as Error });
+  }
+
+  return NextResponse.json({ ok: true, results, autoResolved, slaWarnings });
 }

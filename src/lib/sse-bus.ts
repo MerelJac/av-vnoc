@@ -5,7 +5,8 @@ export type SseEventType =
   | "alert_resolved"
   | "ticket_opened"
   | "ticket_updated"
-  | "kpi_updated";
+  | "kpi_updated"
+  | "sla_warning";
 
 export interface SseEvent {
   type: SseEventType;

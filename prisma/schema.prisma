@@ -89,6 +89,7 @@ model User {
   passwordResetTokens PasswordResetToken[]
   assignedTickets     Ticket[]       @relation("TicketAssignee")
   ticketActions       TicketAction[] @relation("TicketActionAuthor")
+  customerAssignments CustomerAssignment[]
 }
 
 model Organization {
@@ -174,6 +175,18 @@ model Customer {
   sites       Site[]
   tickets     Ticket[]
   alertGroups AlertGroup[]
+  assignments CustomerAssignment[]
+}
+
+model CustomerAssignment {
+  userId     String
+  customerId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([userId, customerId])
+  @@index([customerId])
 }
 
 model Site {

@@ -4,12 +4,17 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageCustomers } from "@/lib/vnoc-access";
 import { customerCreateSchema } from "@/lib/customer-site-schemas";
+import { getAccessibleCustomerIds, customerTenancyWhere } from "@/lib/tenancy";
 
 export async function GET(_req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // null = unrestricted (super-admin, MANAGER, or zero assignments).
+  const accessibleCustomerIds = await getAccessibleCustomerIds(session.user);
+
   const customers = await prisma.customer.findMany({
+    where: customerTenancyWhere(accessibleCustomerIds),
     orderBy: { name: "asc" },
     include: {
       sites: {

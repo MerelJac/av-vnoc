@@ -12,9 +12,14 @@ vi.mock("@/lib/prisma", () => ({
     device: { findMany: vi.fn() },
   },
 }));
+vi.mock("@/lib/tenancy", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/tenancy")>()),
+  getAccessibleCustomerIds: vi.fn(),
+}));
 
 import { getServerSession } from "next-auth";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleCustomerIds } from "@/lib/tenancy";
 
 const mockSession = vi.mocked(getServerSession);
 const mockCustomerFindMany = vi.mocked(prisma.customer.findMany);
@@ -23,8 +28,12 @@ const mockRoomCreate = vi.mocked(prisma.room.create);
 const mockRoomFindUnique = vi.mocked(prisma.room.findUnique);
 const mockRoomUpdate = vi.mocked(prisma.room.update);
 const mockRoomDelete = vi.mocked(prisma.room.delete);
+const mockAccessibleIds = vi.mocked(getAccessibleCustomerIds);
 
-beforeEach(() => { vi.resetAllMocks(); });
+beforeEach(() => {
+  vi.resetAllMocks();
+  mockAccessibleIds.mockResolvedValue(null);
+});
 
 describe("GET /api/rooms", () => {
   it("returns 401 when not authenticated", async () => {
@@ -74,6 +83,48 @@ describe("GET /api/rooms", () => {
       onlineDevices: 1,
       activeAlerts: 1,
     });
+  });
+
+  it("scopes the customer tree for a TIER1 user with customer assignments", async () => {
+    mockSession.mockResolvedValueOnce({
+      user: { id: "tech-1", isSuperAdmin: false, vnocRole: "TIER1" },
+    } as never);
+    mockAccessibleIds.mockResolvedValue(["c1", "c2"]);
+    mockCustomerFindMany.mockResolvedValueOnce([] as never);
+
+    await GET(new NextRequest("http://localhost/api/rooms"));
+
+    expect(mockAccessibleIds).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "tech-1", vnocRole: "TIER1" })
+    );
+    const findArgs = mockCustomerFindMany.mock.calls[0][0] as { where: Record<string, unknown> };
+    expect(findArgs.where).toEqual({ id: { in: ["c1", "c2"] } });
+  });
+
+  it("does not scope super-admin/MANAGER sessions (tenancy returns null)", async () => {
+    mockSession.mockResolvedValueOnce({
+      user: { id: "admin-1", isSuperAdmin: true, vnocRole: null },
+    } as never);
+    mockAccessibleIds.mockResolvedValue(null);
+    mockCustomerFindMany.mockResolvedValueOnce([] as never);
+
+    await GET(new NextRequest("http://localhost/api/rooms"));
+
+    const findArgs = mockCustomerFindMany.mock.calls[0][0] as { where?: Record<string, unknown> };
+    expect(findArgs.where ?? {}).toEqual({});
+  });
+
+  it("does not scope a TIER1 user with zero assignments (tenancy returns null)", async () => {
+    mockSession.mockResolvedValueOnce({
+      user: { id: "tech-2", isSuperAdmin: false, vnocRole: "TIER1" },
+    } as never);
+    mockAccessibleIds.mockResolvedValue(null);
+    mockCustomerFindMany.mockResolvedValueOnce([] as never);
+
+    await GET(new NextRequest("http://localhost/api/rooms"));
+
+    const findArgs = mockCustomerFindMany.mock.calls[0][0] as { where?: Record<string, unknown> };
+    expect(findArgs.where ?? {}).toEqual({});
   });
 });
 

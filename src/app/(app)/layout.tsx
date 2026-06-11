@@ -2,15 +2,25 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleCustomerIds, customerTenancyWhere } from "@/lib/tenancy";
 import SidebarLayout from "../components/team/Sidebar";
 
 export default async function TeamLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
+  // null = unrestricted (super-admin, MANAGER, or zero assignments).
+  const accessibleCustomerIds = await getAccessibleCustomerIds(session.user);
+  const customerWhere = customerTenancyWhere(accessibleCustomerIds);
+
   const [customers, totalCustomers, myQueueCount, profile, configuredCreds] = await Promise.all([
-    prisma.customer.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" }, take: 5 }),
-    prisma.customer.count(),
+    prisma.customer.findMany({
+      where: customerWhere,
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+      take: 5,
+    }),
+    prisma.customer.count({ where: customerWhere }),
     prisma.ticket.count({
       where: { assignedTo: session.user.id, status: { in: ["OPEN", "IN_PROGRESS"] } },
     }),

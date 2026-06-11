@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getAccessibleCustomerIds, ticketTenancyWhere } from "@/lib/tenancy";
 import { TicketStatus, TicketPriority } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
@@ -15,7 +16,11 @@ export async function GET(req: NextRequest) {
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "25")));
 
+  // null = unrestricted (super-admin, MANAGER, or zero assignments).
+  const accessibleCustomerIds = await getAccessibleCustomerIds(session.user);
+
   const where = {
+    ...ticketTenancyWhere(accessibleCustomerIds),
     ...(queue === "mine" ? { assignedTo: session.user.id } : {}),
     ...(status ? { status } : {}),
     ...(priority ? { priority } : {}),

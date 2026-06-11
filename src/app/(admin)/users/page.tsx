@@ -17,6 +17,7 @@ export default async function UsersPage() {
         active: true,
         createdAt: true,
         profile: { select: { firstName: true, lastName: true, phone: true, vnocRole: true } },
+        customerAssignments: { select: { customerId: true } },
       },
       orderBy: { createdAt: "asc" },
     }),
@@ -35,7 +36,11 @@ export default async function UsersPage() {
       </div>
 
       <UsersManager
-        initialUsers={users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() }))}
+        initialUsers={users.map(({ customerAssignments, ...u }) => ({
+          ...u,
+          createdAt: u.createdAt.toISOString(),
+          assignedCustomerIds: customerAssignments.map((a) => a.customerId),
+        }))}
         initialInvites={invites.map((i) => ({
           ...i,
           createdAt: i.createdAt.toISOString(),

@@ -12,7 +12,9 @@ import {
   Mail,
   Power,
   PowerOff,
+  Building2,
 } from "lucide-react";
+import CustomerAssignmentsModal from "./CustomerAssignmentsModal";
 
 type OrgRole = "MEMBER" | "ADMIN" | "OWNER";
 type VnocRole = "TIER1" | "TIER2" | "MANAGER";
@@ -26,6 +28,7 @@ type UserRow = {
   active: boolean;
   createdAt: string;
   profile: { firstName: string; lastName: string; phone: string | null; vnocRole: VnocRole | null } | null;
+  assignedCustomerIds: string[];
 };
 
 type Invite = {
@@ -70,6 +73,7 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
   const [saving, setSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [assignTarget, setAssignTarget] = useState<UserRow | null>(null);
 
   function showToast(type: "success" | "error", msg: string) {
     setToast({ type, msg });
@@ -116,7 +120,7 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create user");
-      setUsers((prev) => [...prev, data]);
+      setUsers((prev) => [...prev, { ...data, assignedCustomerIds: [] }]);
       closeModal();
       showToast("success", "User created");
     } catch (err) {
@@ -141,7 +145,11 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to update user");
-      setUsers((prev) => prev.map((u) => (u.id === editTarget.id ? data : u)));
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === editTarget.id ? { ...data, assignedCustomerIds: u.assignedCustomerIds } : u,
+        ),
+      );
       closeModal();
       showToast("success", "User updated");
     } catch (err) {
@@ -226,6 +234,17 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
     }
   }
 
+  function handleAssignmentsSaved(userId: string, customerIds: string[]) {
+    setUsers((prev) =>
+      prev.map((row) => (row.id === userId ? { ...row, assignedCustomerIds: customerIds } : row)),
+    );
+    setAssignTarget(null);
+    showToast(
+      "success",
+      customerIds.length === 0 ? "User now sees all customers" : "Customer assignments updated",
+    );
+  }
+
   async function handleInvite() {
     if (!inviteEmail.trim()) return;
     setSaving(true);
@@ -280,6 +299,16 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
           {toast.type === "success" ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
           {toast.msg}
         </div>
+      )}
+
+      {assignTarget && (
+        <CustomerAssignmentsModal
+          userId={assignTarget.id}
+          userLabel={assignTarget.email}
+          initialCustomerIds={assignTarget.assignedCustomerIds}
+          onClose={() => setAssignTarget(null)}
+          onSaved={(customerIds) => handleAssignmentsSaved(assignTarget.id, customerIds)}
+        />
       )}
 
       {deleteId && (
@@ -423,6 +452,16 @@ export default function UsersManager({ initialUsers, initialInvites, currentUser
                             </option>
                           ))}
                         </select>
+                        <button
+                          onClick={() => setAssignTarget(user)}
+                          title="Customer access — which customers this user supports"
+                          className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-[#E5E3DE] text-[#666] hover:bg-[#F7F6F3] transition-colors"
+                        >
+                          <Building2 size={12} />
+                          {user.assignedCustomerIds.length === 0
+                            ? "All customers"
+                            : `${user.assignedCustomerIds.length} customer${user.assignedCustomerIds.length === 1 ? "" : "s"}`}
+                        </button>
                         <button
                           onClick={() => !isMe && toggleSuperAdmin(user.id, !user.isSuperAdmin)}
                           disabled={isMe}

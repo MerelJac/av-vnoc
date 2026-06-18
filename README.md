@@ -132,7 +132,7 @@ Routes are organized into App Router **route groups**, each with its own auth gu
 |---|---|---|
 | `(public)` | `/` | None — redirects to `/dashboard` if logged in |
 | `(auth)` | `/login`, `/signup`, `/forgot-password`, `/reset-password`, `/invite/[token]` | None |
-| `(app)` | `/dashboard`, `/alerts`, `/tickets`, `/tickets/[id]`, `/customers`, `/devices`, `/rooms`, `/reports`, `/settings`, `/profile` | `getServerSession` → `/login` |
+| `(app)` | `/dashboard`, `/alerts`, `/tickets`, `/tickets/[id]`, `/customers`, `/devices`, `/rooms`, `/reports`, `/settings`, `/settings/platform`, `/profile`, `/landing` | `getServerSession` → `/login` |
 | `(admin)` | `/users` | `isSuperAdmin` → `/dashboard` |
 
 Auth is enforced in each layout's server component (middleware only handles the `/`

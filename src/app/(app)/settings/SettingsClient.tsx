@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 const PLATFORMS = [
   {
@@ -66,9 +66,66 @@ const PLATFORMS = [
 
 type PlatformId = (typeof PLATFORMS)[number]["id"];
 
+// Config keys the server never returns (write-only mTLS material). When set,
+// the GET response signals their presence via `config.hasCert` instead.
+const SECRET_CONFIG_KEYS = new Set(["certPem", "keyPem"]);
+
 interface FieldValues {
   creds: Record<string, string>;
   config: Record<string, string>;
+}
+
+interface IntegrationRecord {
+  platform: string;
+  clientId: string | null;
+  clientSecret: string | null;
+  apiKey: string | null;
+  webhookSecret: string | null;
+  config: Record<string, unknown> | null;
+}
+
+interface SyncResult {
+  synced: number;
+  errors: string[];
+}
+
+/** Build prefilled form values + saved/connected state from one GET record. */
+function deriveFromRecord(rec: IntegrationRecord) {
+  const def = PLATFORMS.find((p) => p.id === rec.platform);
+  if (!def) return null;
+
+  const config = (rec.config as Record<string, unknown>) ?? {};
+  const creds: Record<string, string> = {};
+  const configValues: Record<string, string> = {};
+  const savedSecrets = new Set<string>();
+
+  for (const field of def.credFields) {
+    const value = rec[field.key as "clientId" | "clientSecret" | "apiKey" | "webhookSecret"];
+    if (field.type === "password") {
+      if (value) savedSecrets.add(field.key); // masked value means it's stored
+    } else if (typeof value === "string") {
+      creds[field.key] = value; // non-secret (clientId) returned in the clear
+    }
+  }
+
+  for (const field of def.configFields) {
+    if (SECRET_CONFIG_KEYS.has(field.key)) {
+      if (config.hasCert) savedSecrets.add(field.key);
+    } else if (typeof config[field.key] === "string") {
+      configValues[field.key] = config[field.key] as string;
+    }
+  }
+
+  const connected = Boolean(
+    rec.clientId || rec.clientSecret || rec.apiKey || rec.webhookSecret || config.hasCert
+  );
+
+  return {
+    platform: rec.platform,
+    values: { creds, config: configValues } satisfies FieldValues,
+    savedSecrets: Array.from(savedSecrets),
+    connected,
+  };
 }
 
 export function SettingsClient() {
@@ -76,7 +133,58 @@ export function SettingsClient() {
   const [saved, setSaved] = useState<PlatformId | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, FieldValues>>({});
+  const [savedSecrets, setSavedSecrets] = useState<Record<string, string[]>>({});
+  const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load existing credentials so configured platforms show their non-secret
+  // values and a "connected" indicator instead of an empty form.
+  const loadIntegrations = useCallback(async (onlyPlatform?: PlatformId) => {
+    try {
+      const res = await fetch("/api/integrations");
+      if (!res.ok) throw new Error("Failed to load saved credentials");
+      const json = (await res.json()) as { data?: IntegrationRecord[] };
+      const records = Array.isArray(json.data) ? json.data : [];
+
+      const derived = records
+        .map(deriveFromRecord)
+        .filter((d): d is NonNullable<ReturnType<typeof deriveFromRecord>> => d !== null);
+
+      setSavedSecrets((prev) => {
+        const next = { ...prev };
+        for (const d of derived) next[d.platform] = d.savedSecrets;
+        return next;
+      });
+      setConnected((prev) => {
+        const next = { ...prev };
+        for (const d of derived) next[d.platform] = d.connected;
+        return next;
+      });
+      setValues((prev) => {
+        // On a targeted refresh (after save) only replace that platform's
+        // values so unsaved edits in other cards survive.
+        if (onlyPlatform) {
+          const d = derived.find((x) => x.platform === onlyPlatform);
+          return d ? { ...prev, [onlyPlatform]: d.values } : prev;
+        }
+        const next = { ...prev };
+        for (const d of derived) next[d.platform] = d.values;
+        return next;
+      });
+    } catch (err) {
+      // Non-fatal: the form is still usable for fresh entry.
+      setError(err instanceof Error ? err.message : "Failed to load saved credentials");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadIntegrations();
+  }, [loadIntegrations]);
 
   function onCredChange(platform: string, field: string, value: string) {
     setValues((prev) => ({
@@ -135,6 +243,8 @@ export function SettingsClient() {
       setSaved(platformId);
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
       savedTimerRef.current = setTimeout(() => setSaved(null), 3000);
+      // Refresh just this platform to reflect newly-saved secrets/connection.
+      await loadIntegrations(platformId);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -142,12 +252,37 @@ export function SettingsClient() {
     }
   }
 
+  async function onSync() {
+    setSyncing(true);
+    setSyncResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/integrations/sync", { method: "POST" });
+      const data = (await res.json()) as { ok?: boolean; synced?: number; errors?: string[]; error?: string };
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error ?? "Sync failed");
+      }
+      setSyncResult({ synced: data.synced ?? 0, errors: data.errors ?? [] });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function secretPlaceholder(platformId: string, fieldKey: string, type: string): string {
+    const isSaved = (savedSecrets[platformId] ?? []).includes(fieldKey);
+    if (isSaved) return "•••••••• saved — leave blank to keep";
+    return type === "password" ? "••••••••" : "";
+  }
+
   return (
     <div className="max-w-2xl mx-auto py-10 px-4 space-y-8">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Platform Credentials</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Credentials are stored in the database. Secret fields are masked after saving.
+          Credentials are stored in the database. Secret fields are masked after saving —
+          leave a saved secret blank to keep its current value.
         </p>
       </div>
 
@@ -157,12 +292,63 @@ export function SettingsClient() {
         </div>
       )}
 
-      {PLATFORMS.map((platform) => (
+      {/* Sync devices — verifies the saved credentials actually reach each vendor. */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm p-6 space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Test connection</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Run a device sync across all configured platforms to confirm credentials work.
+            </p>
+          </div>
+          <button
+            onClick={onSync}
+            disabled={syncing}
+            className="shrink-0 rounded-md bg-gray-900 hover:bg-black disabled:opacity-50 px-4 py-2 text-sm font-medium text-white transition-colors"
+          >
+            {syncing ? "Syncing…" : "Sync devices now"}
+          </button>
+        </div>
+        {syncResult && (
+          <div
+            className={`rounded-lg px-4 py-3 text-sm ${
+              syncResult.errors.length > 0
+                ? "bg-amber-50 border border-amber-200 text-amber-800"
+                : "bg-green-50 border border-green-200 text-green-800"
+            }`}
+          >
+            <p className="font-medium">Synced {syncResult.synced} device{syncResult.synced === 1 ? "" : "s"}.</p>
+            {syncResult.errors.length > 0 && (
+              <ul className="list-disc list-inside mt-1 space-y-0.5">
+                {syncResult.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
+      {PLATFORMS.map((platform) => {
+        const isConnected = connected[platform.id] ?? false;
+        return (
         <div
           key={platform.id}
           className="rounded-xl border border-gray-200 bg-white shadow-sm p-6 space-y-4"
         >
-          <h2 className="text-lg font-semibold text-gray-900">{platform.label}</h2>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-gray-900">{platform.label}</h2>
+            <span
+              className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                isConnected ? "text-green-700" : "text-gray-400"
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-gray-300"}`}
+              />
+              {loading ? "Loading…" : isConnected ? "Connected" : "Not configured"}
+            </span>
+          </div>
           {"note" in platform && (
             <p className="text-xs text-gray-500 -mt-2">{platform.note}</p>
           )}
@@ -178,7 +364,11 @@ export function SettingsClient() {
               <input
                 id={`${platform.id}-${field.key}`}
                 type={field.type}
-                placeholder={field.type === "password" ? "••••••••" : ""}
+                placeholder={
+                  field.type === "password"
+                    ? secretPlaceholder(platform.id, field.key, field.type)
+                    : ""
+                }
                 value={values[platform.id]?.creds[field.key] ?? ""}
                 onChange={(e) => onCredChange(platform.id, field.key, e.target.value)}
                 className="w-full rounded-md bg-white border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -203,6 +393,7 @@ export function SettingsClient() {
                     <textarea
                       id={`${platform.id}-${field.key}`}
                       rows={4}
+                      placeholder={secretPlaceholder(platform.id, field.key, "textarea")}
                       value={values[platform.id]?.config[field.key] ?? ""}
                       onChange={(e) => onConfigChange(platform.id, field.key, e.target.value)}
                       className="w-full rounded-md bg-white border border-gray-300 px-3 py-2 text-sm font-mono text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -230,7 +421,8 @@ export function SettingsClient() {
             {saving === platform.id ? "Saving…" : saved === platform.id ? "Saved ✓" : "Save"}
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       # This repo does not commit package-lock.json, so use `npm install`
       # (npm ci / setup-node cache both require a lockfile).
       - run: npm install --no-audit --no-fund
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       # This repo does not commit package-lock.json, so use `npm install`
       # (npm ci / setup-node cache both require a lockfile).
       - run: npm install --no-audit --no-fund

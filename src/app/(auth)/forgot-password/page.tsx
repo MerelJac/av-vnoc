@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="w-full max-w-sm space-y-6 text-center">
           <h1 className="font-syne font-extrabold text-3xl text-secondary-color tracking-tight">
-            AV_FLOW
+            Call One VNOC
           </h1>
           <div className="bg-white border border-surface2 rounded-2xl p-6 space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-[#3dffa0]/10 flex items-center justify-center mx-auto text-xl">
@@ -53,7 +53,7 @@ export default function ForgotPasswordPage() {
         {/* Brand */}
         <div className="text-center space-y-1">
           <h1 className="font-syne font-extrabold text-3xl text-secondary-color tracking-tight">
-            AV_FLOW
+            Call One VNOC
           </h1>
           <p className="text-sm text-muted">Reset your password</p>
         </div>
@@ -94,7 +94,7 @@ export default function ForgotPasswordPage() {
         </form>
 
         <p className="text-xs text-center text-muted">
-          © {new Date().getFullYear()} AV_FLOW
+          © {new Date().getFullYear()} Call One VNOC
         </p>
       </div>
     </div>

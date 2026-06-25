@@ -22,8 +22,8 @@ const dmSans = DM_Sans({
 
 
 export const metadata: Metadata = {
-  title: "CallOne NOC",
-  description: "CallOne Network Operations Center",
+  title: "Call One VNOC",
+  description: "Call One Network Operations Center",
   icons: {
     icon: "/favicon.svg",
   },

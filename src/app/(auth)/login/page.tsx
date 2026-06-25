@@ -37,7 +37,7 @@ export default function LoginPage() {
         {/* Brand */}
         <div className="text-center space-y-1">
           <h1 className="font-orbitron font-extrabold text-3xl text-secondary-color tracking-tight">
-            AV_FLOW
+            Call One VNOC
           </h1>
           <p className="text-sm text-muted">Sign in to your account</p>
         </div>
@@ -103,7 +103,7 @@ export default function LoginPage() {
         </form>
 
         <p className="text-xs text-center text-muted">
-          © {new Date().getFullYear()} AV_FLOW
+          © {new Date().getFullYear()} Call One VNOC
         </p>
       </div>
     </div>

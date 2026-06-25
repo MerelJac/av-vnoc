@@ -41,7 +41,7 @@ export default function SignupPage() {
         {/* Brand */}
         <div className="text-center space-y-1">
           <h1 className="font-orbitron font-extrabold text-3xl text-secondary-color tracking-tight">
-            AV_FLOW
+            Call One VNOC
           </h1>
           <p className="text-sm text-muted">Create your account</p>
         </div>

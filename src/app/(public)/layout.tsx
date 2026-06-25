@@ -12,7 +12,7 @@ export default function PublicLayout({
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur-md border-b border-surface2">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="font-extrabold text-lg text-secondary-color tracking-tight font-orbitron">
-            AV_FLOW
+            Call One VNOC
           </Link>
 
           <nav className="flex items-center gap-3">
@@ -34,7 +34,7 @@ export default function PublicLayout({
       <footer className="border-t border-surface2 bg-black">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
           <span className="text-xs text-muted">
-            © {new Date().getFullYear()} AV_FLOW
+            © {new Date().getFullYear()} Call One VNOC
           </span>
           {/* <Link
             href="/terms"

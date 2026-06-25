@@ -6,7 +6,7 @@ import { sendEmail } from "./config";
 export async function sendForgotPasswordEmail(to: string, resetUrl: string) {
   return sendEmail({
     to,
-    subject: "Reset your AV_FLOW password",
+    subject: "Reset your Call One VNOC password",
     html: `
         <div style="font-family:sans-serif; line-height:1.5; color:#333;">
           <h2>Password reset requested</h2>
@@ -18,7 +18,7 @@ export async function sendForgotPasswordEmail(to: string, resetUrl: string) {
           </p>
           <p>If you didn’t request this, please contact support.</p>
           <br/>
-          <p style="font-size:0.9rem; color:#888;">— AV_FLOW</p>
+          <p style="font-size:0.9rem; color:#888;">— Call One VNOC</p>
         </div>
       `,
     text: "Reset your password! Click the link to reset: " + resetUrl,
